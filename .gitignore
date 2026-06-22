@@ -1,0 +1,35 @@
+# ----------------------------------------------------------------------
+# Node.js / Frontend (React/Vite)
+# ----------------------------------------------------------------------
+frontend/node_modules/
+frontend/dist/
+frontend/build/
+frontend/.npm/
+frontend/.env
+frontend/.env.*
+frontend/.eslintcache
+frontend/coverage/
+
+# ----------------------------------------------------------------------
+# Python / Backend (FastAPI)
+# ----------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+backend/venv/
+backend/.env
+backend/.pytest_cache/
+backend/uploads/
+backend/truthlens.db
+backend/alembic/versions/*
+!backend/alembic/versions/.gitkeep
+
+# ----------------------------------------------------------------------
+# General / OS
+# ----------------------------------------------------------------------
+.DS_Store
+Thumbs.db
+*.log
+.vscode/
+.idea/
