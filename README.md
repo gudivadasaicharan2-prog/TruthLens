@@ -1,4 +1,4 @@
-# TruthLens - AI-Powered Fake News & Deepfake Detection Platform
+# TruthLens - AI-Powered Deepfake Detection System
 
 A full-stack web application for detecting fake news, deepfakes, and misinformation across multiple media types using AI.
 

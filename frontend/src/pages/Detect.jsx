@@ -330,7 +330,7 @@ const Detect = () => {
       setImageResult(data); setImageStep(3);
       showToast('Analysis complete!');
     } catch (err) {
-      const msg = err.response?.data?.detail || err.message || 'Analysis failed.';
+      const msg = getErrorMessage(err);
       setImageError(msg); showToast(msg, 'error');
     } finally { setImageLoading(false); }
   };
@@ -380,7 +380,7 @@ const Detect = () => {
       setAudioResult(data); setAudioStep(3);
       showToast('Audio analysis complete!');
     } catch (err) {
-      const msg = err.response?.data?.detail || err.message || 'Analysis failed.';
+      const msg = getErrorMessage(err);
       setAudioError(msg); showToast(msg, 'error');
     } finally { setAudioLoading(false); }
   };

@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const BASE_URL = import.meta.env.VITE_API_URL || '';
+const BASE_URL = import.meta.env.VITE_API_URL || 'https://truthlens-htjy.onrender.com';
 
 const api = axios.create({
   baseURL: BASE_URL,
@@ -52,7 +52,9 @@ export const getErrorMessage = (err) => {
   if (err.code === 'ECONNABORTED' || err.message?.includes('timeout'))
     return 'Request timed out. Please try again.';
   if (err.code === 'ERR_NETWORK' || err.message === 'Network Error')
-    return 'Cannot reach the backend. Make sure FastAPI is running on port 8000.';
+    return 'Backend unavailable';
+  if (err.response?.status === 404)
+    return 'Invalid API endpoint';
   const body = err.response?.data;
   if (body?.detail) return typeof body.detail === 'string' ? body.detail : JSON.stringify(body.detail);
   if (body?.message) return body.message;
@@ -76,6 +78,7 @@ export const analyzeImage = (file) => {
   formData.append('file', file);
   return api.post('/api/v1/image/analyze', formData, {
     timeout: 120000,
+    headers: { 'Content-Type': 'multipart/form-data' },
   }).then(res => res.data);
 };
 
