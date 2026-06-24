@@ -16,26 +16,26 @@ const fmt = (val) => {
 };
 
 const TABS = [
-  { id: 'image', icon: ImageIcon, label: '🖼️ Image', color: 'cyan',   gradient: 'from-cyan-500 to-blue-600' },
-  { id: 'video', icon: Video,     label: '🎥 Video', color: 'purple', gradient: 'from-purple-500 to-pink-600' },
-  { id: 'audio', icon: Mic,       label: '🔊 Audio', color: 'green',  gradient: 'from-green-500 to-emerald-600' },
+  { id: 'image', icon: ImageIcon, label: '🖼️ Image', color: 'cyan', gradient: 'from-cyan-500 to-blue-600' },
+  { id: 'video', icon: Video, label: '🎥 Video', color: 'purple', gradient: 'from-purple-500 to-pink-600' },
+  { id: 'audio', icon: Mic, label: '🔊 Audio', color: 'green', gradient: 'from-green-500 to-emerald-600' },
 ];
 
 const STEPS = [
-  { label: 'Upload',     icon: Upload },
+  { label: 'Upload', icon: Upload },
   { label: 'Processing', icon: Sparkles },
-  { label: 'Analysis',   icon: FileText },
-  { label: 'Result',     icon: CheckCircle2 },
+  { label: 'Analysis', icon: FileText },
+  { label: 'Result', icon: CheckCircle2 },
 ];
 
 const VERDICT_CONFIG = {
-  'Authentic':           { color: 'text-green-400',   border: 'border-green-500/40',   bg: 'bg-green-500/8',   icon: '✅', ring: 'ring-green-500/20' },
-  'Likely Authentic':    { color: 'text-emerald-400',  border: 'border-emerald-500/40', bg: 'bg-emerald-500/8', icon: '✅', ring: 'ring-emerald-500/20' },
-  'Suspicious':          { color: 'text-amber-400',    border: 'border-amber-500/40',   bg: 'bg-amber-500/8',   icon: '⚠️', ring: 'ring-amber-500/20' },
-  'Likely AI Generated': { color: 'text-orange-400',   border: 'border-orange-500/40',  bg: 'bg-orange-500/8',  icon: '🤖', ring: 'ring-orange-500/20' },
-  'AI Generated':        { color: 'text-red-400',      border: 'border-red-500/40',     bg: 'bg-red-500/8',     icon: '❌', ring: 'ring-red-500/20' },
-  'Deepfake':            { color: 'text-red-400',      border: 'border-red-500/40',     bg: 'bg-red-500/8',     icon: '🎭', ring: 'ring-red-500/20' },
-  'Manipulated':         { color: 'text-rose-400',     border: 'border-rose-500/40',    bg: 'bg-rose-500/8',    icon: '✂️', ring: 'ring-rose-500/20' },
+  'Authentic': { color: 'text-green-400', border: 'border-green-500/40', bg: 'bg-green-500/8', icon: '✅', ring: 'ring-green-500/20' },
+  'Likely Authentic': { color: 'text-emerald-400', border: 'border-emerald-500/40', bg: 'bg-emerald-500/8', icon: '✅', ring: 'ring-emerald-500/20' },
+  'Suspicious': { color: 'text-amber-400', border: 'border-amber-500/40', bg: 'bg-amber-500/8', icon: '⚠️', ring: 'ring-amber-500/20' },
+  'Likely AI Generated': { color: 'text-orange-400', border: 'border-orange-500/40', bg: 'bg-orange-500/8', icon: '🤖', ring: 'ring-orange-500/20' },
+  'AI Generated': { color: 'text-red-400', border: 'border-red-500/40', bg: 'bg-red-500/8', icon: '❌', ring: 'ring-red-500/20' },
+  'Deepfake': { color: 'text-red-400', border: 'border-red-500/40', bg: 'bg-red-500/8', icon: '🎭', ring: 'ring-red-500/20' },
+  'Manipulated': { color: 'text-rose-400', border: 'border-rose-500/40', bg: 'bg-rose-500/8', icon: '✂️', ring: 'ring-rose-500/20' },
 };
 
 /* ── Progress Stepper ── */
@@ -44,9 +44,8 @@ const Stepper = ({ step }) => (
     {STEPS.map((s, i) => (
       <div key={s.label} className="flex items-center">
         <div className={`flex flex-col items-center gap-1 transition-all ${i <= step ? 'opacity-100' : 'opacity-30'}`}>
-          <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
-            i < step ? 'bg-cyan-500 text-white' : i === step ? 'bg-cyan-500/20 border border-cyan-500 text-cyan-400 animate-pulse' : 'bg-white/5 border border-white/10 text-gray-500'
-          }`}>
+          <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all ${i < step ? 'bg-cyan-500 text-white' : i === step ? 'bg-cyan-500/20 border border-cyan-500 text-cyan-400 animate-pulse' : 'bg-white/5 border border-white/10 text-gray-500'
+            }`}>
             {i < step ? '✓' : <s.icon className="w-3.5 h-3.5" />}
           </div>
           <span className="text-[10px] text-gray-500 hidden sm:block">{s.label}</span>
@@ -77,9 +76,9 @@ const ResultCard = ({ result, onReset }) => {
     bg: 'bg-cyan-500/8', icon: '🔍', ring: 'ring-cyan-500/20'
   };
 
-  const aiProb       = Math.round(parseFloat(result.ai_probability ?? result.ai_detection_score ?? 0));
+  const aiProb = Math.round(parseFloat(result.ai_probability ?? result.ai_detection_score ?? 0));
   const deepfakeProb = Math.round(parseFloat(result.deepfake_probability ?? 0));
-  const confNum      = parseInt(confidence, 10);
+  const confNum = parseInt(confidence, 10);
 
   return (
     <motion.div
@@ -110,11 +109,10 @@ const ResultCard = ({ result, onReset }) => {
             initial={{ width: 0 }}
             animate={{ width: `${confidence}%` }}
             transition={{ duration: 1, ease: 'easeOut' }}
-            className={`h-full rounded-full bg-gradient-to-r ${
-              confNum >= 80 ? 'from-green-500 to-emerald-400' :
-              confNum >= 50 ? 'from-amber-500 to-yellow-400' :
-              'from-red-500 to-orange-400'
-            }`}
+            className={`h-full rounded-full bg-gradient-to-r ${confNum >= 80 ? 'from-green-500 to-emerald-400' :
+                confNum >= 50 ? 'from-amber-500 to-yellow-400' :
+                  'from-red-500 to-orange-400'
+              }`}
           />
         </div>
 
@@ -226,9 +224,8 @@ const DropZone = ({ id, accept, icon: Icon, gradient, title, hint, onUpload }) =
   const handleDrag = (e) => { e.preventDefault(); e.stopPropagation(); setDrag(e.type !== 'dragleave' && e.type !== 'drop'); };
   return (
     <div
-      className={`border-2 border-dashed rounded-3xl p-16 text-center transition-all cursor-pointer ${
-        drag ? 'border-cyan-400 bg-cyan-500/5' : 'border-white/10 hover:border-white/25 bg-white/2'
-      }`}
+      className={`border-2 border-dashed rounded-3xl p-16 text-center transition-all cursor-pointer ${drag ? 'border-cyan-400 bg-cyan-500/5' : 'border-white/10 hover:border-white/25 bg-white/2'
+        }`}
       onDragEnter={handleDrag} onDragLeave={handleDrag} onDragOver={handleDrag}
       onDrop={(e) => { handleDrag(e); onUpload(e); }}
       onClick={() => document.getElementById(id)?.click()}
@@ -287,24 +284,24 @@ const Detect = () => {
   const initialTab = searchParams.get('tab') || 'image';
   const [activeTab, setActiveTab] = useState(initialTab);
 
-  const [imageFile, setImageFile]       = useState(null);
+  const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
-  const [imageResult, setImageResult]   = useState(null);
+  const [imageResult, setImageResult] = useState(null);
   const [imageLoading, setImageLoading] = useState(false);
-  const [imageError, setImageError]     = useState(null);
-  const [imageStep, setImageStep]       = useState(0);
+  const [imageError, setImageError] = useState(null);
+  const [imageStep, setImageStep] = useState(0);
 
-  const [videoFile, setVideoFile]       = useState(null);
-  const [videoResult, setVideoResult]   = useState(null);
+  const [videoFile, setVideoFile] = useState(null);
+  const [videoResult, setVideoResult] = useState(null);
   const [videoLoading, setVideoLoading] = useState(false);
-  const [videoError, setVideoError]     = useState(null);
-  const [videoStep, setVideoStep]       = useState(0);
+  const [videoError, setVideoError] = useState(null);
+  const [videoStep, setVideoStep] = useState(0);
 
-  const [audioFile, setAudioFile]       = useState(null);
-  const [audioResult, setAudioResult]   = useState(null);
+  const [audioFile, setAudioFile] = useState(null);
+  const [audioResult, setAudioResult] = useState(null);
   const [audioLoading, setAudioLoading] = useState(false);
-  const [audioError, setAudioError]     = useState(null);
-  const [audioStep, setAudioStep]       = useState(0);
+  const [audioError, setAudioError] = useState(null);
+  const [audioStep, setAudioStep] = useState(0);
 
   const [toast, setToast] = useState(null);
 
@@ -347,9 +344,12 @@ const Detect = () => {
       await new Promise(r => setTimeout(r, 600));
       setImageStep(2);
       const data = await analyzeImage(file);
+      console.log("Analyze Result:", data);
+      console.log("Setting analysis result:", data);
       setImageResult(data); setImageStep(3);
       showToast('Analysis complete!');
     } catch (err) {
+      console.log("Caught Error:", err);
       const msg = getErrorMessage(err);
       setImageError(msg); showToast(msg, 'error');
     } finally { setImageLoading(false); }
@@ -422,11 +422,10 @@ const Detect = () => {
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
-            className={`fixed top-20 right-4 z-50 px-5 py-3 rounded-xl text-sm font-medium shadow-xl ${
-              toast.type === 'error'
+            className={`fixed top-20 right-4 z-50 px-5 py-3 rounded-xl text-sm font-medium shadow-xl ${toast.type === 'error'
                 ? 'bg-red-900/90 border border-red-500/40 text-red-200'
                 : 'bg-green-900/90 border border-green-500/40 text-green-200'
-            }`}
+              }`}
           >
             {toast.msg}
           </motion.div>
@@ -454,11 +453,10 @@ const Detect = () => {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex-1 py-3 px-4 rounded-xl font-semibold transition-all duration-200 text-sm ${
-                activeTab === tab.id
+              className={`flex-1 py-3 px-4 rounded-xl font-semibold transition-all duration-200 text-sm ${activeTab === tab.id
                   ? `bg-gradient-to-r ${tab.gradient} text-white shadow-lg`
                   : 'text-gray-500 hover:text-white hover:bg-white/5'
-              }`}
+                }`}
             >
               {tab.label}
             </button>

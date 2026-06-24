@@ -80,14 +80,25 @@ export const googleLogin = (token) =>
   api.post(`${API_BASE_URL}/api/v1/auth/google`, { token });
 
 // ── Image ─────────────────────────────────────────────────────────────────────
-export const analyzeImage = (file) => {
+export const analyzeImage = async (file) => {
   console.log("Selected file:", file);
   const formData = new FormData();
   formData.append('file', file);
-  return api.post(`${API_BASE_URL}/api/v1/image/analyze`, formData, {
-    timeout: 120000,
-    headers: { 'Content-Type': 'multipart/form-data' },
-  }).then(res => res.data);
+  try {
+    const response = await api.post(`${API_BASE_URL}/api/v1/image/analyze`, formData, {
+      timeout: 120000,
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+
+    console.log("API Response:", response);
+    console.log("API Response Data:", response.data);
+    console.log("Response Type:", typeof response.data);
+
+    return response.data;
+  } catch (error) {
+    console.log("Caught Error:", error);
+    throw error;
+  }
 };
 
 // ── Video ─────────────────────────────────────────────────────────────────────
@@ -152,18 +163,18 @@ const logBeforeCall = (url) => {
     if (url.includes('history')) {
       console.log("History Request URL:", url);
     }
-  } catch(e) {}
+  } catch (e) { }
 };
 
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 export const getDashboardStats = () => { const url = `${API_BASE_URL}/api/v1/users/${getUid()}/statistics`; logBeforeCall(url); return api.get(url); };
-export const getDailyStats     = () => { const url = `${API_BASE_URL}/api/v1/users/${getUid()}/daily`; logBeforeCall(url); return api.get(url); };
+export const getDailyStats = () => { const url = `${API_BASE_URL}/api/v1/users/${getUid()}/daily`; logBeforeCall(url); return api.get(url); };
 export const getRecentActivity = () => { const url = `${API_BASE_URL}/api/v1/users/${getUid()}/recent`; logBeforeCall(url); return api.get(url); };
-export const getTopDetections  = () => { const url = `${API_BASE_URL}/api/v1/users/${getUid()}/topics`; logBeforeCall(url); return api.get(url); };
+export const getTopDetections = () => { const url = `${API_BASE_URL}/api/v1/users/${getUid()}/topics`; logBeforeCall(url); return api.get(url); };
 
 // ── User / History ────────────────────────────────────────────────────────────
-export const getUserHistory    = ()   => { const url = `${API_BASE_URL}/api/v1/users/${getUid()}/history`; logBeforeCall(url); return api.get(url); };
+export const getUserHistory = () => { const url = `${API_BASE_URL}/api/v1/users/${getUid()}/history`; logBeforeCall(url); return api.get(url); };
 export const deleteHistoryItem = (id) => { const url = `${API_BASE_URL}/api/v1/users/${getUid()}/history/${id}`; logBeforeCall(url); return api.delete(url); };
-export const getUserProfile    = ()   => { const url = `${API_BASE_URL}/api/v1/users/${getUid()}/profile`; logBeforeCall(url); return api.get(url); };
+export const getUserProfile = () => { const url = `${API_BASE_URL}/api/v1/users/${getUid()}/profile`; logBeforeCall(url); return api.get(url); };
 
 export default api;
