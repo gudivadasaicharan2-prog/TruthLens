@@ -24,7 +24,18 @@ import os
 import re
 import hashlib
 import httpx
+import gc
 from PIL.ExifTags import TAGS
+
+def _get_mem_mb() -> float:
+    try:
+        with open(f"/proc/{os.getpid()}/status") as f:
+            for line in f:
+                if line.startswith("VmRSS:"):
+                    return float(line.split()[1]) / 1024.0
+    except Exception:
+        pass
+    return 0.0
 
 
 # ── AI generation keywords ──────────────────────────────────────────────────
@@ -67,9 +78,8 @@ def _get_face_cascade():
     return _FACE_CASCADE
 
 
-def _detect_faces(img_array: np.ndarray) -> int:
+def _detect_faces(gray: np.ndarray) -> int:
     try:
-        gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
         faces = _get_face_cascade().detectMultiScale(
             gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30)
         )
@@ -85,12 +95,11 @@ def _has_ai_keywords(filename: str, exif: dict) -> bool:
 
 
 # ── Forensic analysis ────────────────────────────────────────────────────────
-def _run_forensics(img_array: np.ndarray) -> tuple[int, list[str]]:
+def _run_forensics(gray: np.ndarray, hsv: np.ndarray) -> tuple[int, list[str]]:
     """Return (indicator_count, reason_list). Max 5 indicators."""
     indicators = 0
     reasons    = []
     try:
-        gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
 
         # 1. Laplacian sharpness
         lap_var = cv2.Laplacian(gray, cv2.CV_64F).var()
@@ -112,7 +121,6 @@ def _run_forensics(img_array: np.ndarray) -> tuple[int, list[str]]:
             reasons.append("Abnormal edge distribution pattern")
 
         # 4. Color spectrum variance
-        hsv = cv2.cvtColor(img_array, cv2.COLOR_RGB2HSV)
         color_var = float(np.std(hsv[:, :, 0]))
         if color_var < 7:
             indicators += 1
@@ -134,10 +142,9 @@ def _run_forensics(img_array: np.ndarray) -> tuple[int, list[str]]:
 
 
 # ── Noise/splicing check ─────────────────────────────────────────────────────
-def _noise_variance(img_array: np.ndarray) -> float:
+def _noise_variance(gray: np.ndarray) -> float:
     """Quadrant noise variance — high value signals splicing."""
     try:
-        gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
         h, w = gray.shape
         quads = [
             gray[:h//2, :w//2], gray[:h//2, w//2:],
@@ -150,15 +157,13 @@ def _noise_variance(img_array: np.ndarray) -> float:
 
 
 # ── Image type classification ────────────────────────────────────────────────
-def _classify_image_type(img_array: np.ndarray, face_count: int) -> str:
+def _classify_image_type(img_array: np.ndarray, gray: np.ndarray, hsv: np.ndarray, face_count: int) -> str:
     if face_count > 0:
         return "face_photo"
     try:
-        hsv = cv2.cvtColor(img_array, cv2.COLOR_RGB2HSV)
         low_sat = float(np.sum(hsv[:, :, 1] < 30) / hsv[:, :, 1].size)
         if low_sat > 0.55:
             return "screenshot"
-        gray  = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
         edges = cv2.Canny(gray, 50, 150)
         if float(np.sum(edges > 0) / edges.size) > 0.18:
             return "document"
@@ -245,14 +250,34 @@ async def analyze_image(image_path: str) -> dict:
 
     filename = os.path.basename(image_path)
     print(f"\n[IMAGE v3] Analyzing: {filename}")
+    mem_before = _get_mem_mb()
+    print(f"[MEMORY] Before analysis: {mem_before:.1f} MB")
+
+    if mem_before > 400.0:
+        return {
+            "verdict": "Analysis Failed",
+            "confidence": 0.0,
+            "ai_probability": 0.0,
+            "deepfake_probability": 0.0,
+            "key_findings": ["✗ Memory limit reached. Aborting to prevent server crash."],
+            "metadata_summary": {"error": "Server memory limit reached. Try a smaller image."},
+            "source_links": [],
+        }
 
     # ── Open image ──────────────────────────────────────────────────────────
     try:
-        pil_img   = Image.open(image_path).convert("RGB")
+        pil_img = Image.open(image_path).convert("RGB")
         width, height = pil_img.size
+        # Resize to max 1024px to save memory
+        if width > 1024 or height > 1024:
+            resample_filter = getattr(Image, 'Resampling', Image).LANCZOS
+            pil_img.thumbnail((1024, 1024), resample_filter)
+        
         img_array = np.array(pil_img)
+        gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
+        hsv = cv2.cvtColor(img_array, cv2.COLOR_RGB2HSV)
     except Exception as e:
-        print(f"[IMAGE v3] Cannot open: {e}")
+        print(f"[IMAGE v3] Cannot open or process: {e}")
         return {
             "verdict": "Analysis Failed",
             "confidence": 0.0,
@@ -266,13 +291,13 @@ async def analyze_image(image_path: str) -> dict:
     # ── Signal collection ───────────────────────────────────────────────────
     exif       = _extract_exif(image_path)
     has_exif   = bool(exif)
-    face_count = _detect_faces(img_array)
+    face_count = _detect_faces(gray)
     has_face   = face_count > 0
     ai_flag    = _has_ai_keywords(filename, exif)
-    noise_var  = _noise_variance(img_array)
+    noise_var  = _noise_variance(gray)
     is_spliced = noise_var > 25.0          # raised threshold vs old 15.0
-    forensic_n, forensic_reasons = _run_forensics(img_array)
-    image_type = _classify_image_type(img_array, face_count)
+    forensic_n, forensic_reasons = _run_forensics(gray, hsv)
+    image_type = _classify_image_type(img_array, gray, hsv, face_count)
     device     = _get_device_name(exif)
 
     print(f"[IMAGE v3] has_exif={has_exif}, faces={face_count}, ai_flag={ai_flag}, "
@@ -390,6 +415,14 @@ async def analyze_image(image_path: str) -> dict:
         metadata_summary["capture_date"] = exif["DateTime"]
     if "Software" in exif:
         metadata_summary["software"] = exif["Software"][:60]
+
+    # ── Free Image Arrays Before Network Call ───────────────────────────────
+    try:
+        del img_array, gray, hsv, pil_img
+        gc.collect()
+    except Exception:
+        pass
+    print(f"[MEMORY] After GC: {_get_mem_mb():.1f} MB")
 
     # ── Reverse image search ────────────────────────────────────────────────
     source_links = await _reverse_search(image_path, exif)
