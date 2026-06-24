@@ -85,6 +85,8 @@ export const analyzeImage = async (file) => {
   const formData = new FormData();
   formData.append('file', file);
   try {
+    const API_BASE_URL = import.meta.env.VITE_API_URL || "https://truthlens-htjy.onrender.com";
+    console.log("IMAGE REQUEST URL:", `${API_BASE_URL}/api/v1/image/analyze`);
     const response = await api.post(`${API_BASE_URL}/api/v1/image/analyze`, formData, {
       timeout: 120000,
       headers: { 'Content-Type': 'multipart/form-data' },
