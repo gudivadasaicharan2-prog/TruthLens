@@ -18,3 +18,4 @@ transformers==4.38.0
 Pillow==11.2.1
 opencv-python-headless==4.13.0.92
 numpy
+psycopg2-binary
