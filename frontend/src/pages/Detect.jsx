@@ -313,6 +313,26 @@ const Detect = () => {
     setTimeout(() => setToast(null), 4000);
   };
 
+  useEffect(() => {
+    fetch('https://truthlens-htjy.onrender.com/health')
+      .then(res => res.text())
+      .then(text => console.log("[Startup] Backend health check OK:", text))
+      .catch(err => console.error("[Startup] Backend health check FAILED:", err));
+  }, []);
+
+  const handleTestConnection = async () => {
+    const url = 'https://truthlens-htjy.onrender.com/health';
+    try {
+      const res = await fetch(url);
+      const text = await res.text();
+      console.log("[Test Connection] Response:", res.status, text);
+      showToast(`Success: HTTP ${res.status}`, 'success');
+    } catch (e) {
+      console.error("[Test Connection] Failed:", e);
+      showToast(`Error: ${e.message}`, 'error');
+    }
+  };
+
   /* ── Handlers ── */
   const handleImage = async (e) => {
     const file = e.target?.files?.[0] || e.dataTransfer?.files?.[0];
@@ -423,6 +443,9 @@ const Detect = () => {
           <p className="text-gray-400 text-lg">
             Upload an image, video, or audio file to analyze its authenticity
           </p>
+          <button onClick={handleTestConnection} className="mt-4 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold transition">
+            Test Backend Connection
+          </button>
         </motion.div>
 
         {/* Tab bar */}

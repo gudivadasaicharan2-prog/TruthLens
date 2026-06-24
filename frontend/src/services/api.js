@@ -1,14 +1,17 @@
 import axios from 'axios';
 
-const BASE_URL = import.meta.env.VITE_API_URL || 'https://truthlens-htjy.onrender.com';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://truthlens-htjy.onrender.com';
 
 const api = axios.create({
-  baseURL: BASE_URL,
+  baseURL: API_BASE_URL,
   timeout: 120000,
 });
 
 // ── Request interceptor — attach token + user email header ────────────────────
 api.interceptors.request.use(config => {
+  console.log("API Base URL:", API_BASE_URL);
+  console.log("Sending request to:", config.url);
+  console.log("Request headers:", config.headers);
   const token = localStorage.getItem('token');
   if (token) config.headers.Authorization = `Bearer ${token}`;
 
@@ -34,8 +37,12 @@ api.interceptors.response.use(
   },
   err => {
     if (err.response) {
-      console.log("Response Status:", err.response.status);
-      console.log("Response Body:", err.response.data);
+      console.error("HTTP Error:", err.response.status);
+      console.error("Response:", err.response.data);
+    } else if (err.request) {
+      console.error("No response received:", err.request);
+    } else {
+      console.error("Request setup error:", err.message);
     }
     if (err.code === 'ECONNABORTED') {
       console.error('[API] TIMEOUT:', err.config?.url);
@@ -64,19 +71,20 @@ export const getErrorMessage = (err) => {
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 export const register = (name, email, password, role) =>
-  api.post('/api/v1/auth/register', { name, email, password, role });
+  api.post(`${API_BASE_URL}/api/v1/auth/register`, { name, email, password, role });
 
 export const login = (email, password) =>
-  api.post('/api/v1/auth/login', { email, password });
+  api.post(`${API_BASE_URL}/api/v1/auth/login`, { email, password });
 
 export const googleLogin = (token) =>
-  api.post('/api/v1/auth/google', { token });
+  api.post(`${API_BASE_URL}/api/v1/auth/google`, { token });
 
 // ── Image ─────────────────────────────────────────────────────────────────────
 export const analyzeImage = (file) => {
+  console.log("Selected file:", file);
   const formData = new FormData();
   formData.append('file', file);
-  return api.post('/api/v1/image/analyze', formData, {
+  return api.post(`${API_BASE_URL}/api/v1/image/analyze`, formData, {
     timeout: 120000,
     headers: { 'Content-Type': 'multipart/form-data' },
   }).then(res => res.data);
@@ -87,7 +95,7 @@ export const analyzeVideo = async (file) => {
   const formData = new FormData();
   formData.append('file', file);
 
-  const apiUrl = '/api/v1/video/analyze';
+  const apiUrl = `${API_BASE_URL}/api/v1/video/analyze`;
   console.log('[VIDEO] File:', file.name, `(${(file.size / 1024 / 1024).toFixed(2)} MB)`, file.type);
   console.log('[VIDEO] Uploading to:', apiUrl);
 
@@ -113,7 +121,7 @@ export const analyzeVideo = async (file) => {
 export const analyzeAudio = (file) => {
   const formData = new FormData();
   formData.append('file', file);
-  return api.post('/api/v1/audio/analyze', formData, {
+  return api.post(`${API_BASE_URL}/api/v1/audio/analyze`, formData, {
     timeout: 120000,
   }).then(res => res.data);
 };
@@ -148,14 +156,14 @@ const logBeforeCall = (url) => {
 };
 
 // ── Dashboard ─────────────────────────────────────────────────────────────────
-export const getDashboardStats = () => { const url = `/api/v1/users/${getUid()}/statistics`; logBeforeCall(url); return api.get(url); };
-export const getDailyStats     = () => { const url = `/api/v1/users/${getUid()}/daily`; logBeforeCall(url); return api.get(url); };
-export const getRecentActivity = () => { const url = `/api/v1/users/${getUid()}/recent`; logBeforeCall(url); return api.get(url); };
-export const getTopDetections  = () => { const url = `/api/v1/users/${getUid()}/topics`; logBeforeCall(url); return api.get(url); };
+export const getDashboardStats = () => { const url = `${API_BASE_URL}/api/v1/users/${getUid()}/statistics`; logBeforeCall(url); return api.get(url); };
+export const getDailyStats     = () => { const url = `${API_BASE_URL}/api/v1/users/${getUid()}/daily`; logBeforeCall(url); return api.get(url); };
+export const getRecentActivity = () => { const url = `${API_BASE_URL}/api/v1/users/${getUid()}/recent`; logBeforeCall(url); return api.get(url); };
+export const getTopDetections  = () => { const url = `${API_BASE_URL}/api/v1/users/${getUid()}/topics`; logBeforeCall(url); return api.get(url); };
 
 // ── User / History ────────────────────────────────────────────────────────────
-export const getUserHistory    = ()   => { const url = `/api/v1/users/${getUid()}/history`; logBeforeCall(url); return api.get(url); };
-export const deleteHistoryItem = (id) => { const url = `/api/v1/users/${getUid()}/history/${id}`; logBeforeCall(url); return api.delete(url); };
-export const getUserProfile    = ()   => { const url = `/api/v1/users/${getUid()}/profile`; logBeforeCall(url); return api.get(url); };
+export const getUserHistory    = ()   => { const url = `${API_BASE_URL}/api/v1/users/${getUid()}/history`; logBeforeCall(url); return api.get(url); };
+export const deleteHistoryItem = (id) => { const url = `${API_BASE_URL}/api/v1/users/${getUid()}/history/${id}`; logBeforeCall(url); return api.delete(url); };
+export const getUserProfile    = ()   => { const url = `${API_BASE_URL}/api/v1/users/${getUid()}/profile`; logBeforeCall(url); return api.get(url); };
 
 export default api;
