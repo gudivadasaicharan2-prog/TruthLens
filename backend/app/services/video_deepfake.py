@@ -14,6 +14,7 @@ import cv2
 import uuid
 import shutil
 import numpy as np
+import httpx
 from html.parser import HTMLParser
 
 # ── Reverse search (self-contained, no external class) ──────────────────────

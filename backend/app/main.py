@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
 import os
 import sys
 
@@ -11,10 +12,22 @@ try:
 except AttributeError:
     pass  # Python < 3.7 or non-reconfigurable stream
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Warm-load ML models once at startup to avoid first-request latency."""
+    try:
+        from app.models.image_model import load_model
+        load_model()
+    except Exception as e:
+        print(f"[STARTUP] EfficientNet-B4 load warning: {e}")
+    yield
+
+
 app = FastAPI(
     title="TruthLens API",
     version="2.0.0",
-    description="AI Content Authenticity & Deepfake Detection Platform"
+    description="AI Content Authenticity & Deepfake Detection Platform",
+    lifespan=lifespan,
 )
 
 # CORS

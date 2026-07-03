@@ -13,9 +13,12 @@ httpx==0.25.2
 requests==2.31.0
 aiofiles==23.2.1
 transformers==4.38.0
+# torch and torchvision are installed separately (system-level)
 # torch==2.1.2
 # torchvision==0.16.2
 Pillow==11.2.1
 opencv-python-headless==4.13.0.92
 numpy
 psycopg2-binary
+# RetinaFace-class face detector (installed with --no-deps; torch/numpy/Pillow already present)
+facenet-pytorch==2.5.3
