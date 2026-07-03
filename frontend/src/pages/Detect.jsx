@@ -67,9 +67,7 @@ const ResultCard = ({ result, onReset }) => {
   const verdict = result.verdict || result.result || 'Unknown';
   const confidence = fmt(result.confidence ?? result.authenticity_score);
   const keyFindings = result.key_findings || [];
-  const sourceLinks = (result.source_links || []).filter(
-    s => s.url && !s.url.toLowerCase().includes('wikipedia.org')
-  );
+
   const metaSummary = result.metadata_summary || null;
   const cfg = VERDICT_CONFIG[verdict] || {
     color: 'text-cyan-400', border: 'border-cyan-500/40',
@@ -186,26 +184,7 @@ const ResultCard = ({ result, onReset }) => {
         </div>
       )}
 
-      {/* ── Source Links (non-Wikipedia only) ── */}
-      {sourceLinks.length > 0 && (
-        <div className="bg-white/3 border border-white/8 rounded-2xl p-6">
-          <h3 className="text-white text-sm font-semibold uppercase tracking-wider mb-4">Original Sources</h3>
-          <div className="space-y-2">
-            {sourceLinks.map((src, i) => (
-              <a
-                key={i}
-                href={src.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center justify-between p-3 bg-white/3 hover:bg-white/6 border border-white/5 hover:border-cyan-500/20 rounded-xl transition group"
-              >
-                <span className="text-gray-300 text-sm group-hover:text-cyan-400 transition truncate">• {src.name}</span>
-                <span className="text-cyan-400 text-xs shrink-0 ml-3">↗ Open</span>
-              </a>
-            ))}
-          </div>
-        </div>
-      )}
+
 
       {/* Reset */}
       <button

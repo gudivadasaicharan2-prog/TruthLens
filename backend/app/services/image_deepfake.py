@@ -25,6 +25,8 @@ import re
 import hashlib
 import httpx
 import gc
+import io
+from PIL import ImageChops, ImageEnhance
 from PIL.ExifTags import TAGS
 
 def _get_mem_mb() -> float:
@@ -140,6 +142,28 @@ def _run_forensics(gray: np.ndarray, hsv: np.ndarray) -> tuple[int, list[str]]:
 
     return indicators, reasons
 
+# ── Error Level Analysis (ELA) ──────────────────────────────────────────────
+def _run_ela(pil_img: Image.Image) -> float:
+    """Calculates JPEG compression difference variance to spot tampering."""
+    try:
+        temp_io = io.BytesIO()
+        pil_img.save(temp_io, "JPEG", quality=90)
+        temp_io.seek(0)
+        resaved = Image.open(temp_io)
+        ela = ImageChops.difference(pil_img, resaved)
+        extrema = ela.getextrema()
+        max_diff = max([ex[1] for ex in extrema]) if extrema else 1
+        if max_diff == 0:
+            max_diff = 1
+        scale = 255.0 / max_diff
+        ela = ImageEnhance.Brightness(ela).enhance(scale)
+        ela_array = np.array(ela)
+        gray_ela = cv2.cvtColor(ela_array, cv2.COLOR_RGB2GRAY)
+        return float(np.var(gray_ela))
+    except Exception as e:
+        print(f"[ELA] Error: {e}")
+        return 0.0
+
 
 # ── Noise/splicing check ─────────────────────────────────────────────────────
 def _noise_variance(gray: np.ndarray) -> float:
@@ -175,72 +199,6 @@ def _classify_image_type(img_array: np.ndarray, gray: np.ndarray, hsv: np.ndarra
     return "photo"
 
 
-# ── Reverse image search (DuckDuckGo only — no Wikipedia) ───────────────────
-async def _reverse_search(image_path: str, exif: dict) -> list[dict]:
-    filename = os.path.basename(image_path)
-    keywords = re.sub(r"[\-_.]", " ", filename)
-    keywords = re.sub(
-        r"\b(?:jpg|jpeg|png|webp|gif|upload|uuid|image|tmp)\b", "",
-        keywords, flags=re.IGNORECASE
-    )
-    keywords = re.sub(r"\s+", " ", keywords).strip()
-    if not keywords:
-        keywords = exif.get("ImageDescription", "") or "photo"
-
-    results = []
-    try:
-        async with httpx.AsyncClient(timeout=8.0, follow_redirects=True) as client:
-            resp = await client.get(
-                "https://html.duckduckgo.com/html/",
-                params={"q": f"{keywords} original photo source", "kl": "us-en"},
-                headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"},
-            )
-            if resp.status_code == 200:
-                # Parse <a class="result__a"> links
-                from html.parser import HTMLParser
-
-                class _DDGParser(HTMLParser):
-                    def __init__(self):
-                        super().__init__()
-                        self.results = []
-                        self._in_link = False
-                        self._cur = {}
-
-                    def handle_starttag(self, tag, attrs):
-                        if tag == "a":
-                            d = dict(attrs)
-                            cls = d.get("class", "")
-                            if "result__a" in cls:
-                                self._in_link = True
-                                self._cur = {"url": d.get("href", ""), "title": ""}
-
-                    def handle_data(self, data):
-                        if self._in_link:
-                            self._cur["title"] += data
-
-                    def handle_endtag(self, tag):
-                        if tag == "a" and self._in_link:
-                            self._in_link = False
-                            if self._cur.get("title"):
-                                self.results.append(dict(self._cur))
-
-                parser = _DDGParser()
-                parser.feed(resp.text)
-
-                for r in parser.results[:3]:
-                    url = r["url"]
-                    # Skip Wikipedia links — not useful for authenticity
-                    if "wikipedia.org" in url.lower():
-                        continue
-                    title = r["title"].strip()[:60]
-                    if title and url:
-                        results.append({"name": title, "url": url})
-
-    except Exception as e:
-        print(f"[REVERSE SEARCH] Error: {e}")
-
-    return results[:3]
-
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Main analyzer
@@ -261,7 +219,6 @@ async def analyze_image(image_path: str) -> dict:
             "deepfake_probability": 0.0,
             "key_findings": ["✗ Memory limit reached. Aborting to prevent server crash."],
             "metadata_summary": {"error": "Server memory limit reached. Try a smaller image."},
-            "source_links": [],
         }
 
     # ── Open image ──────────────────────────────────────────────────────────
@@ -285,7 +242,6 @@ async def analyze_image(image_path: str) -> dict:
             "deepfake_probability": 0.0,
             "key_findings": [f"✗ Could not open file: {e}"],
             "metadata_summary": {"error": str(e)},
-            "source_links": [],
         }
 
     # ── Signal collection ───────────────────────────────────────────────────
@@ -296,12 +252,14 @@ async def analyze_image(image_path: str) -> dict:
     ai_flag    = _has_ai_keywords(filename, exif)
     noise_var  = _noise_variance(gray)
     is_spliced = noise_var > 25.0          # raised threshold vs old 15.0
+    ela_var    = _run_ela(pil_img)
+    has_ela_anomaly = ela_var > 800.0      # ELA variance threshold
     forensic_n, forensic_reasons = _run_forensics(gray, hsv)
     image_type = _classify_image_type(img_array, gray, hsv, face_count)
     device     = _get_device_name(exif)
 
     print(f"[IMAGE v3] has_exif={has_exif}, faces={face_count}, ai_flag={ai_flag}, "
-          f"noise_var={noise_var:.1f}, forensic={forensic_n}/5, type={image_type}")
+          f"noise_var={noise_var:.1f}, ela_var={ela_var:.1f}, forensic={forensic_n}/5, type={image_type}")
 
     # ── Weighted scoring ────────────────────────────────────────────────────
     score = 50.0
@@ -317,6 +275,9 @@ async def analyze_image(image_path: str) -> dict:
 
     if is_spliced:
         score -= 40.0
+        
+    if has_ela_anomaly:
+        score -= 30.0
 
     # Forensic indicators only penalize when 3 or more fire (avoid false positives)
     if forensic_n >= 3:
@@ -395,6 +356,11 @@ async def analyze_image(image_path: str) -> dict:
         findings.append(f"✗ Inconsistent sensor noise across quadrants — possible splicing (variance: {noise_var:.1f})")
     else:
         findings.append("✓ Pixel noise is consistent across all image quadrants")
+        
+    if has_ela_anomaly:
+        findings.append(f"✗ Error Level Analysis (ELA) detected abnormal compression artifacts (variance: {ela_var:.1f})")
+    else:
+        findings.append("✓ Error Level Analysis shows consistent compression levels")
 
     if forensic_n >= 3:
         findings.append(f"✗ {forensic_n}/5 forensic anomalies detected: {'; '.join(forensic_reasons[:2])}")
@@ -424,9 +390,6 @@ async def analyze_image(image_path: str) -> dict:
         pass
     print(f"[MEMORY] After GC: {_get_mem_mb():.1f} MB")
 
-    # ── Reverse image search ────────────────────────────────────────────────
-    source_links = await _reverse_search(image_path, exif)
-
     return to_python({
         "verdict":             verdict,
         "confidence":          confidence,
@@ -434,7 +397,6 @@ async def analyze_image(image_path: str) -> dict:
         "deepfake_probability": deepfake_probability,
         "key_findings":        findings,
         "metadata_summary":    metadata_summary,
-        "source_links":        source_links,
         # Legacy fields kept for backward compat with history/dashboard
         "truth_score":         round(score, 1),
         "ai_detection_score":  ai_probability,

@@ -35,7 +35,15 @@ const History = () => {
     setLoading(true); setError(null);
     try {
       const res = await getUserHistory();
-      setItems(Array.isArray(res.data) ? res.data : []);
+      // Handle both old (array) and new (paginated object) API formats
+      const data = res.data;
+      if (Array.isArray(data)) {
+        setItems(data);
+      } else if (data && Array.isArray(data.items)) {
+        setItems(data.items);
+      } else {
+        setItems([]);
+      }
     } catch {
       setError('Failed to load history. Make sure you are logged in.');
     } finally { setLoading(false); }

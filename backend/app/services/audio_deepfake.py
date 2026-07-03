@@ -24,6 +24,9 @@ def analyze_audio_heuristic(audio_path: str) -> dict:
         rms = librosa.feature.rms(y=y)[0]
         rms_std = float(np.std(rms))
 
+        flatness = librosa.feature.spectral_flatness(y=y)[0]
+        flatness_mean = float(np.mean(flatness))
+
         # ── Voice Clone Detection ──
         # Calculate pitch variance
         pitches, magnitudes = librosa.piptrack(y=y, sr=sr)
@@ -54,6 +57,8 @@ def analyze_audio_heuristic(audio_path: str) -> dict:
             fake_score += 0.10
         if hf_ratio < 0.0001:
             fake_score += 0.15
+        if flatness_mean > 0.15: # GAN artifact (excessive noise)
+            fake_score += 0.20
 
         fake_score = min(fake_score, 0.95)
 
@@ -85,11 +90,12 @@ def analyze_audio_heuristic(audio_path: str) -> dict:
             f"✓ Organic pitch variation standard deviation: {pitch_std:.2f} Hz",
             f"✓ Spectrogram shows healthy high-frequency distribution ({hf_ratio*100:.3f}% energy)",
             f"✓ Zero crossing rate consistent with human speech patterns ({zcr_mean:.3f})",
-            f"✓ Transcribed content verified as coherent language structures"
+            f"✓ Spectral flatness normal ({flatness_mean:.4f})"
         ] if not is_synthetic else [
             f"✗ Pitch variance is extremely low ({pitch_std:.2f} Hz) - indicating robotic voice cloning",
             f"✗ Spectrogram displays brickwall high-frequency truncation ({hf_ratio*100:.3f}% energy)",
-            f"✗ Energy level variance matches artificial text-to-speech generators"
+            f"✗ Energy level variance matches artificial text-to-speech generators",
+            f"✗ Abnormal spectral flatness ({flatness_mean:.4f}) suggesting GAN artifacts"
         ]
 
         result["reasoning"] = (

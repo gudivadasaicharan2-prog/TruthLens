@@ -18,6 +18,8 @@ def _email_to_user_id(email: str) -> str:
 @router.get("/{uid}/history")
 def get_user_history(
     uid: str,
+    skip: int = 0,
+    limit: int = 100,
     db: Session = Depends(get_db),
     user_email: Optional[str] = Depends(get_user_email_header),
 ):
@@ -41,7 +43,8 @@ def get_user_history(
             except Exception:
                 pass
 
-        media_analyses = q.limit(100).all()
+        total = q.count()
+        media_analyses = q.offset(skip).limit(limit).all()
 
         history = []
         for a in media_analyses:
@@ -55,11 +58,16 @@ def get_user_history(
                 "created_at":  a.created_at.isoformat() if a.created_at else None,
                 "title":       f"{ft.capitalize()} file analysis",
             })
-        return history
+        return {
+            "items": history,
+            "total": total,
+            "skip": skip,
+            "limit": limit
+        }
 
     except Exception as e:
         print(f"[HISTORY] Error: {e}")
-        return []
+        return {"items": [], "total": 0, "skip": skip, "limit": limit}
 
 
 @router.delete("/{uid}/history/{analysis_id}")

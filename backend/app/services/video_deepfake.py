@@ -13,7 +13,6 @@ import os
 import cv2
 import uuid
 import shutil
-import httpx
 import numpy as np
 from html.parser import HTMLParser
 
@@ -189,9 +188,32 @@ def _lip_sync(frame_paths: list[str]) -> dict:
         return {"status": "Inconclusive", "variance": 0.0}
 
 
+# ── Frame Duplication ────────────────────────────────────────────────────────
+def _detect_frame_duplication(frames_all: list[tuple[str, float]]) -> float:
+    """Calculates the ratio of identically duplicated frames (common in cheap deepfakes)."""
+    if len(frames_all) < 2:
+        return 0.0
+    duplicates = 0
+    try:
+        prev = cv2.imread(frames_all[0][0], cv2.IMREAD_GRAYSCALE)
+        for i in range(1, len(frames_all)):
+            curr = cv2.imread(frames_all[i][0], cv2.IMREAD_GRAYSCALE)
+            if prev is not None and curr is not None:
+                # If Mean Squared Error is exactly 0, frames are identical clones
+                err = np.sum((prev.astype("float") - curr.astype("float")) ** 2)
+                err /= float(prev.shape[0] * prev.shape[1])
+                if err < 1.0:
+                    duplicates += 1
+            prev = curr
+        return duplicates / float(len(frames_all) - 1)
+    except Exception as e:
+        print(f"[FRAME DUP] Error: {e}")
+        return 0.0
+
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 def _safe_result(verdict: str, confidence: float, ai_prob: float, deepfake_prob: float,
-                 findings: list[str], metadata: dict, source_links: list[dict]) -> dict:
+                 findings: list[str], metadata: dict) -> dict:
     """Construct a guaranteed-complete response dict for the frontend ResultCard."""
     from app.core.serializer import to_python
     return to_python({
@@ -201,7 +223,6 @@ def _safe_result(verdict: str, confidence: float, ai_prob: float, deepfake_prob:
         "deepfake_probability": deepfake_prob,
         "key_findings":         findings,
         "metadata_summary":     metadata,
-        "source_links":         source_links,
         # Legacy back-compat fields
         "truth_score":          round(confidence * 100, 1),
         "ai_detection_score":   ai_prob,
@@ -227,9 +248,8 @@ async def analyze_video(video_path: str) -> dict:
             return _safe_result(
                 verdict="Analysis Failed",
                 confidence=0.0, ai_prob=0.0, deepfake_prob=0.0,
-                findings=["✗ Could not open video file — format may be unsupported"],
-                metadata={"filename": filename, "error": "Cannot open video"},
-                source_links=[],
+                findings=["✗ Could not open video file"],
+                metadata={"filename": filename, "error": "Invalid format or corrupt file"},
             )
 
         fps          = float(cap.get(cv2.CAP_PROP_FPS) or 30)
@@ -270,9 +290,6 @@ async def analyze_video(video_path: str) -> dict:
 
         print(f"[VIDEO v2] Sampled {len(frames_all)} frames, {len(frames_with_faces)} with faces")
 
-        # ── Reverse search ───────────────────────────────────────────────────
-        source_links = await _video_reverse_search(video_path)
-
         # ── No faces detected ────────────────────────────────────────────────
         if not frames_with_faces:
             # Still score general frames for AI artifacts
@@ -301,9 +318,10 @@ async def analyze_video(video_path: str) -> dict:
             ]
 
             return _safe_result(verdict, confidence, ai_prob, deepfake_prob,
-                                findings, metadata, source_links)
+                                findings, metadata)
 
         # ── Face-based analysis ──────────────────────────────────────────────
+        dup_ratio         = _detect_frame_duplication(frames_all)
         face_paths        = [f[0] for f in frames_with_faces]
         consistency_score = _face_consistency(face_paths)
         face_swapped      = consistency_score < 0.60
@@ -313,10 +331,10 @@ async def analyze_video(video_path: str) -> dict:
         max_score         = float(np.max(frame_scores)) if frame_scores else 0.3
 
         print(f"[VIDEO v2] consistency={consistency_score:.2f}, swapped={face_swapped}, "
-              f"avg_frame_score={avg_score:.2f}, lip={lip_result['status']}")
+              f"avg_frame_score={avg_score:.2f}, lip={lip_result['status']}, dup_ratio={dup_ratio:.2f}")
 
         # ── Verdict calibration ──────────────────────────────────────────────
-        is_suspicious = face_swapped or avg_score > 0.55
+        is_suspicious = face_swapped or avg_score > 0.55 or dup_ratio > 0.15
 
         if is_suspicious:
             if avg_score > 0.70 or face_swapped:
@@ -345,7 +363,6 @@ async def analyze_video(video_path: str) -> dict:
         ai_prob       = max(1.0, min(ai_prob, 99.0))
         deepfake_prob = max(1.0, min(deepfake_prob, 99.0))
 
-        # ── Key findings ─────────────────────────────────────────────────────
         findings = [
             f"✓ Video metadata: {width}x{height} @ {fps:.1f} FPS, {duration:.1f}s",
             f"{'✗' if face_swapped else '✓'} Face consistency across frames: "
@@ -353,11 +370,10 @@ async def analyze_video(video_path: str) -> dict:
             f"{'✓' if 'active' in lip_result['status'].lower() else '•'} {lip_result['status']}",
             f"{'✗' if avg_score > 0.55 else '✓'} Frame forensic score: {avg_score:.0%} "
             f"({'anomalous' if avg_score > 0.55 else 'normal'})",
+            f"{'✗' if dup_ratio > 0.15 else '✓'} Frame duplication ratio: {dup_ratio:.0%} "
+            f"({'high — possible tampering' if dup_ratio > 0.15 else 'normal'})",
             f"✓ {len(face_paths)} face-containing frame(s) analyzed",
         ]
-        if source_links:
-            findings.append(f"✓ Cross-referenced against {len(source_links)} online source(s)")
-
         metadata.update({
             "faces_detected": len(frames_with_faces),
             "frames_analyzed": len(face_paths),
@@ -367,7 +383,7 @@ async def analyze_video(video_path: str) -> dict:
               f"ai={ai_prob}%, deepfake={deepfake_prob}%")
 
         return _safe_result(verdict, confidence, ai_prob, deepfake_prob,
-                            findings, metadata, source_links)
+                            findings, metadata)
 
     except Exception as e:
         import traceback
@@ -379,7 +395,6 @@ async def analyze_video(video_path: str) -> dict:
             confidence=0.0, ai_prob=0.0, deepfake_prob=0.0,
             findings=[f"✗ Video analysis encountered an error: {str(e)}"],
             metadata={"filename": filename, "error": str(e)},
-            source_links=[],
         )
     finally:
         if os.path.exists(frame_dir):
