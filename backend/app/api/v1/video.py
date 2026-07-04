@@ -2,7 +2,7 @@ from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 import os, uuid, json
-from app.services.video_deepfake import analyze_video
+from app.ai.detectors.video_detector import analyze_video
 from app.core.json_encoder import NumpyEncoder
 from app.core.database import get_db
 from app.core.security import get_user_email_header

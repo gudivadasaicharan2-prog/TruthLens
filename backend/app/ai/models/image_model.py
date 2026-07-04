@@ -50,8 +50,8 @@ from torchvision.models import efficientnet_b4, EfficientNet_B4_Weights
 # Resolved path: backend/weights/deepfake_classifier.pth
 # ---------------------------------------------------------------------------
 CLASSIFIER_WEIGHTS_PATH: str = os.path.join(
-    os.path.dirname(__file__),   # backend/app/models/
-    "..", "..", "weights",        # -> backend/weights/
+    os.path.dirname(__file__),   # backend/app/ai/models/
+    "..", "..", "..", "weights",  # -> backend/weights/
     "deepfake_classifier.pth",
 )
 # ---------------------------------------------------------------------------

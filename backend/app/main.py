@@ -16,7 +16,7 @@ except AttributeError:
 async def lifespan(app: FastAPI):
     """Warm-load ML models once at startup to avoid first-request latency."""
     try:
-        from app.models.image_model import load_model
+        from app.ai.models.image_model import load_model
         load_model()
     except Exception as e:
         print(f"[STARTUP] EfficientNet-B4 load warning: {e}")

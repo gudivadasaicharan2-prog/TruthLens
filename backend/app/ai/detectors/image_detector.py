@@ -34,21 +34,29 @@ import numpy as np
 from PIL import Image
 import os
 import gc
-import io
 import math
-from PIL import ImageChops, ImageEnhance
-from PIL.ExifTags import TAGS
 
 # ── Face detection (MTCNN — RetinaFace-class) ─────────────────────────────────
-from app.services.face_detector import detect_faces_with_boxes
+from app.ai.models.face_detector import detect_faces_with_boxes
 
 # ── EfficientNet-B4 classifier ────────────────────────────────────────────────
-from app.models.image_model import (
+from app.ai.models.image_model import (
     predict_whole_image,
     predict_fake_probability,
     get_all_face_crops,
     is_using_trained_weights,
 )
+
+# ── Forensic modules ───────────────────────────────────────────────────────────
+from app.ai.forensics.ela import ela_score
+from app.ai.forensics.noise import noise_splice_score
+from app.ai.forensics.frequency import frequency_domain_score
+from app.ai.forensics.texture import texture_uniformity_score
+from app.ai.forensics.color_analysis import color_channel_anomaly
+from app.ai.forensics.metadata import extract_exif, get_device_name, exif_authenticity_score
+
+# ── Image type classifier ─────────────────────────────────────────────────────
+from app.ai.classification.image_type_classifier import classify_image_type
 
 
 # =============================================================================
@@ -65,26 +73,6 @@ def _get_mem_mb() -> float:
     except Exception:
         pass
     return 0.0
-
-
-def _extract_exif(image_path: str) -> dict:
-    """Extract EXIF tags from a JPEG/TIFF image. Returns empty dict on failure."""
-    try:
-        img = Image.open(image_path)
-        raw = img._getexif()
-        if not raw:
-            return {}
-        return {TAGS.get(k, k): str(v) for k, v in raw.items()}
-    except Exception:
-        return {}
-
-
-def _get_device_name(exif: dict) -> str:
-    make  = exif.get("Make", "")
-    model = exif.get("Model", "")
-    if make and model:
-        return f"{make.strip()} {model.strip()}"
-    return make or model or "Unknown"
 
 
 def _classify_image_type(
@@ -113,228 +101,6 @@ def _classify_image_type(
 # Forensic Signal Extractors
 # =============================================================================
 
-def _ela_score(pil_img: Image.Image) -> tuple[float, float]:
-    """
-    Error Level Analysis — re-compress at JPEG q=90 and compare.
-
-    Real camera photos re-compressed at the same quality produce low,
-    uniform error.  Edited or AI-generated images produce high, uneven error.
-
-    Returns:
-        (ela_var, normalized_score)  where normalized_score is in [0, 1].
-    """
-    try:
-        buf = io.BytesIO()
-        pil_img.save(buf, "JPEG", quality=90)
-        buf.seek(0)
-        resaved = Image.open(buf)
-        ela = ImageChops.difference(pil_img, resaved)
-        extrema = ela.getextrema()
-        max_diff = max(ex[1] for ex in extrema) if extrema else 1
-        if max_diff == 0:
-            max_diff = 1
-        ela = ImageEnhance.Brightness(ela).enhance(255.0 / max_diff)
-        ela_arr = np.array(ela)
-        gray_ela = cv2.cvtColor(ela_arr, cv2.COLOR_RGB2GRAY)
-        ela_var = float(np.var(gray_ela))
-        # Normalise: < 200 is clean; > 2000 is strongly anomalous
-        score = min(max((ela_var - 200.0) / 1800.0, 0.0), 1.0)
-        return ela_var, round(score, 4)
-    except Exception as e:
-        print(f"[ELA] Error: {e}")
-        return 0.0, 0.0
-
-
-def _noise_splice_score(gray: np.ndarray) -> tuple[float, float]:
-    """
-    Quadrant noise-variance — measures inconsistency in sensor noise across
-    image regions. High variance of quadrant stds signals splicing/compositing.
-
-    Returns:
-        (noise_var, normalized_score) where normalized_score is in [0, 1].
-    """
-    try:
-        h, w = gray.shape
-        quads = [
-            gray[:h//2, :w//2], gray[:h//2, w//2:],
-            gray[h//2:, :w//2], gray[h//2:, w//2:],
-        ]
-        stds = [float(np.std(q)) for q in quads]
-        noise_var = float(np.var(stds))
-        # Normalise: < 5 is clean; > 50 is strongly suspicious
-        score = min(max((noise_var - 5.0) / 45.0, 0.0), 1.0)
-        return noise_var, round(score, 4)
-    except Exception:
-        return 0.0, 0.0
-
-
-def _frequency_domain_score(gray: np.ndarray) -> float:
-    """
-    Frequency-domain analysis via 2-D FFT.
-
-    Real camera images have characteristic high-frequency energy (lens
-    diffraction, sensor noise, natural texture detail).  AI-generated images
-    often show anomalous frequency profiles — too clean or periodically
-    structured (GAN grid artifacts, diffusion spectral signatures).
-
-    Returns: float [0, 1] where 1 = suspicious.
-    """
-    try:
-        f = np.fft.fft2(gray.astype(np.float32))
-        fshift = np.fft.fftshift(f)
-        magnitude = 20 * np.log(np.abs(fshift) + 1)
-        freq_mean = float(np.mean(magnitude))
-        freq_std  = float(np.std(magnitude))
-
-        # Mean outside natural range [75, 190] is suspicious
-        mean_score = 0.0
-        if freq_mean < 55 or freq_mean > 230:
-            mean_score = 0.80
-        elif freq_mean < 75 or freq_mean > 190:
-            mean_score = 0.40
-
-        # Very low std = unnaturally uniform frequency spectrum
-        std_score = 0.0
-        if freq_std < 15:
-            std_score = 0.75
-        elif freq_std < 25:
-            std_score = 0.35
-
-        return round((mean_score + std_score) / 2.0, 4)
-    except Exception:
-        return 0.5
-
-
-def _texture_uniformity_score(gray: np.ndarray) -> float:
-    """
-    Patch-variance uniformity — detects GAN/diffusion over-smoothing.
-
-    AI-generated images exhibit characteristic spatial uniformity: all image
-    regions have similar local variance (smooth backgrounds, uniformly sharp
-    subjects).  Real camera images show natural variance differences: blurry
-    backgrounds, sharp subjects, varied texture regions.
-
-    Method:
-      1. Divide image into patches (min 16 px, at most 16x16 grid).
-      2. Compute local variance of each patch.
-      3. Compute the coefficient of variation (std / mean) of those variances.
-      4. Low CoV → uniform texture → suspicious AI signal.
-
-    Returns: float [0, 1] where 1 = suspicious (unnaturally uniform).
-    """
-    try:
-        h, w = gray.shape
-        patch_size = max(16, min(h, w) // 16)
-        variances = []
-
-        for y in range(0, h - patch_size, patch_size):
-            for x in range(0, w - patch_size, patch_size):
-                patch = gray[y: y + patch_size, x: x + patch_size]
-                variances.append(float(np.var(patch)))
-
-        if len(variances) < 4:
-            return 0.5
-
-        mean_var = float(np.mean(variances))
-        if mean_var < 1e-6:
-            return 0.90   # completely flat image — strongly suspicious
-
-        var_of_vars = float(np.var(variances))
-        # Coefficient of variation of patch variances
-        cov = math.sqrt(var_of_vars) / (mean_var + 1e-6)
-
-        # Low CoV (< 0.5) → uniform → higher fake score
-        # Sigmoid mapping: CoV=0 → 0.88, CoV=0.8 → 0.5, CoV=2.0 → 0.15
-        score = 1.0 / (1.0 + math.exp((cov - 0.5) * 4.0))
-        return round(min(max(score, 0.0), 1.0), 4)
-
-    except Exception:
-        return 0.5
-
-
-def _color_channel_anomaly(img_array: np.ndarray) -> float:
-    """
-    Color channel correlation anomaly detection.
-
-    Real camera images have a characteristic R-B channel correlation
-    (~0.65–0.92) imposed by natural scene statistics and Bayer demosaicing.
-    AI-generated images often have near-perfect correlation (over-stylised)
-    or unusual correlation structures.
-
-    Additionally, we check for unnaturally low hue variation, which is a
-    known signature of some GAN architectures.
-
-    Returns: float [0, 1] where 1 = suspicious.
-    """
-    try:
-        r = img_array[:, :, 0].astype(np.float32).flatten()
-        b = img_array[:, :, 2].astype(np.float32).flatten()
-
-        # Subsample for speed on large arrays
-        step = max(1, len(r) // 10000)
-        r_s, b_s = r[::step], b[::step]
-
-        if np.std(r_s) < 1e-5 or np.std(b_s) < 1e-5:
-            corr_score = 0.50
-        else:
-            rb_corr = float(np.corrcoef(r_s, b_s)[0, 1])
-
-            # Natural range: ~0.65–0.92; suspicious if outside
-            if rb_corr > 0.97 or rb_corr < 0.35:
-                corr_score = 0.72
-            elif rb_corr > 0.94 or rb_corr < 0.50:
-                corr_score = 0.40
-            else:
-                corr_score = 0.12
-
-        # Hue-channel standard deviation — AI images sometimes unnaturally flat
-        hsv = cv2.cvtColor(img_array, cv2.COLOR_RGB2HSV)
-        hue_std = float(np.std(hsv[:, :, 0]))
-        hue_score = 0.60 if hue_std < 7 else 0.10
-
-        return round((corr_score * 0.6 + hue_score * 0.4), 4)
-
-    except Exception:
-        return 0.5
-
-
-def _exif_authenticity_score(exif: dict) -> float:
-    """
-    Score EXIF completeness and consistency for camera authenticity.
-
-    Real cameras write: Make, Model, ExposureTime, FNumber, ISOSpeedRatings,
-    DateTime, and lens data — all together.  AI tools either produce empty
-    EXIF or write only a 'Software' tag.
-
-    Returns: float [0, 1] where 1 = authentic-looking, 0 = suspicious.
-    """
-    if not exif:
-        # No EXIF — neutral (many real web images strip EXIF too)
-        return 0.40
-
-    # AI software keywords in EXIF Software tag = strong indicator
-    software = exif.get("Software", "").lower()
-    ai_sw_keywords = [
-        "midjourney", "dall-e", "stable diffusion", "firefly", "adobe firefly",
-        "generative", "ai generated", "nightcafe", "artbreeder",
-    ]
-    if any(kw in software for kw in ai_sw_keywords):
-        return 0.05   # near-certain AI
-
-    # Score based on presence of real camera EXIF fields
-    camera_fields = {"Make", "Model", "ExposureTime", "FNumber", "ISOSpeedRatings"}
-    present = sum(1 for f in camera_fields if f in exif)
-
-    if present >= 4:
-        return 0.95
-    elif present >= 2:
-        return 0.70
-    elif present >= 1:
-        return 0.45
-    else:
-        return 0.25   # has EXIF but no camera fields — suspicious
-
-
 def _forensic_bundle(
     gray: np.ndarray,
     img_array: np.ndarray,
@@ -359,7 +125,7 @@ def _forensic_bundle(
     findings: list[str] = []
 
     # --- ELA ---
-    ela_var, ela_signal = _ela_score(pil_img)
+    ela_var, ela_signal = ela_score(pil_img)
     if ela_var > 800:
         findings.append(
             f"✗ ELA detected abnormal compression artifacts (variance: {ela_var:.0f})"
@@ -368,7 +134,7 @@ def _forensic_bundle(
         findings.append("✓ ELA compression levels are consistent across the image")
 
     # --- Noise / splicing ---
-    noise_var, noise_signal = _noise_splice_score(gray)
+    noise_var, noise_signal = noise_splice_score(gray)
     if noise_var > 25:
         findings.append(
             f"✗ Inconsistent sensor noise across quadrants — possible splicing "
@@ -378,14 +144,14 @@ def _forensic_bundle(
         findings.append("✓ Sensor noise is consistent across all image quadrants")
 
     # --- Frequency domain ---
-    freq_signal = _frequency_domain_score(gray)
+    freq_signal = frequency_domain_score(gray)
     if freq_signal > 0.5:
         findings.append("✗ Anomalous frequency spectrum — unnatural spectral signature")
     else:
         findings.append("✓ Frequency spectrum is within natural camera range")
 
     # --- Texture uniformity ---
-    texture_signal = _texture_uniformity_score(gray)
+    texture_signal = texture_uniformity_score(gray)
     if texture_signal > 0.62:
         findings.append(
             "✗ Texture uniformity suggests AI generation "
@@ -397,10 +163,10 @@ def _forensic_bundle(
         )
 
     # --- Color channel anomaly ---
-    color_signal = _color_channel_anomaly(img_array)
+    color_signal = color_channel_anomaly(img_array)
 
     # --- EXIF consistency (inverted: high authenticity = low fake score) ---
-    exif_auth = _exif_authenticity_score(exif)
+    exif_auth = exif_authenticity_score(exif)
     exif_signal = 1.0 - exif_auth   # convert to fake-score
 
     # --- Weighted forensic score ---
@@ -595,35 +361,65 @@ async def analyze_image(image_path: str) -> dict:
         }
 
     # ── Metadata ──────────────────────────────────────────────────────────────
-    exif       = _extract_exif(image_path)
+    exif       = extract_exif(image_path)
     has_exif   = bool(exif)
-    device     = _get_device_name(exif)
+    device     = get_device_name(exif)
 
-    # ── Face detection ────────────────────────────────────────────────────────
+    # ── Image Type Classification (Pipeline Routing) ─────────────────────────
+    # First, detect faces to inform classification
     face_count, boxes, probs = detect_faces_with_boxes(img_array)
     has_face   = face_count > 0
-    image_type = _classify_image_type(img_array, gray, hsv, face_count)
-
+    
+    # Run image type classifier
+    classification = classify_image_type(img_array, face_count)
+    image_type = classification["image_type"]
+    recommended_pipeline = classification["recommended_pipeline"]
+    
     print(
-        f"[IMAGE v5] has_exif={has_exif}, faces={face_count}, type={image_type}"
+        f"[IMAGE v5] has_exif={has_exif}, faces={face_count}, "
+        f"type={image_type}, pipeline={recommended_pipeline}"
     )
 
-    # ── Signal [1]: Whole-image AI detection ──────────────────────────────────
-    # Always runs — detects AI-generated images regardless of content type.
-    whole_image_score = predict_whole_image(img_array)
-    print(f"[IMAGE v5] whole_image_score={whole_image_score:.3f}")
-
-    # ── Signal [2]: Face deepfake detection (optional) ────────────────────────
+    # ── Pipeline Routing ─────────────────────────────────────────────────────
     face_score: float | None = None
-    if has_face:
-        face_crops = get_all_face_crops(img_array, boxes, probs, min_confidence=0.85)
-        if face_crops:
-            per_face = [predict_fake_probability(crop) for crop in face_crops]
-            face_score = max(per_face)   # worst-case: highest fake prob wins
-            print(
-                f"[IMAGE v5] face scores={[round(p,3) for p in per_face]}"
-                f" → face_score={face_score:.3f}"
-            )
+    
+    if recommended_pipeline == "face":
+        # Use existing face detector
+        if has_face:
+            face_crops = get_all_face_crops(img_array, boxes, probs, min_confidence=0.85)
+            if face_crops:
+                per_face = [predict_fake_probability(crop) for crop in face_crops]
+                face_score = max(per_face)   # worst-case: highest fake prob wins
+                print(
+                    f"[IMAGE v5] face scores={[round(p,3) for p in per_face]}"
+                    f" → face_score={face_score:.3f}"
+                )
+        # Always run whole-image detection
+        whole_image_score = predict_whole_image(img_array)
+        print(f"[IMAGE v5] whole_image_score={whole_image_score:.3f}")
+        
+    elif recommended_pipeline == "whole_image":
+        # Skip face detector, use whole-image only
+        whole_image_score = predict_whole_image(img_array)
+        print(f"[IMAGE v5] whole_image_score={whole_image_score:.3f} (face detection skipped)")
+        
+    elif recommended_pipeline == "document":
+        # Forensic analysis only - skip AI models
+        whole_image_score = 0.5  # Neutral score for documents
+        print(f"[IMAGE v5] document mode - forensic analysis only")
+    else:
+        # Default: run both
+        whole_image_score = predict_whole_image(img_array)
+        print(f"[IMAGE v5] whole_image_score={whole_image_score:.3f}")
+        if has_face:
+            face_crops = get_all_face_crops(img_array, boxes, probs, min_confidence=0.85)
+            if face_crops:
+                per_face = [predict_fake_probability(crop) for crop in face_crops]
+                face_score = max(per_face)
+                print(
+                    f"[IMAGE v5] face scores={[round(p,3) for p in per_face]}"
+                    f" → face_score={face_score:.3f}"
+                )
 
     # ── Signal [3]: Forensic bundle ───────────────────────────────────────────
     forensic_score, forensic_findings = _forensic_bundle(

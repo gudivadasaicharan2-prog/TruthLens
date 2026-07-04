@@ -11,28 +11,25 @@ class HealthResponse(BaseModel):
 def check_models():
     """Check if AI models are loaded and available"""
     try:
-        from app.services.image_deepfake import MODEL_1, MODEL_2
-        from app.services.video_deepfake import MODEL
-        from app.services.fake_news import NEWS_MODEL
+        from app.ai.models.image_model import is_using_trained_weights
+        
+        # Check if EfficientNet-B4 is loaded
+        image_model_loaded = is_using_trained_weights()
         
         return {
-            "status": "healthy" if all([MODEL_1, MODEL_2, MODEL, NEWS_MODEL]) else "degraded",
+            "status": "healthy" if image_model_loaded else "degraded",
             "models": {
-                "image_model_1": {
-                    "loaded": MODEL_1 is not None,
-                    "model_name": "dima806/deepfake_detection" if MODEL_1 else "Not loaded"
-                },
-                "image_model_2": {
-                    "loaded": MODEL_2 is not None,
-                    "model_name": "Ahmed1295/deepfake-detection" if MODEL_2 else "Not loaded"
+                "image_model": {
+                    "loaded": image_model_loaded,
+                    "model_name": "EfficientNet-B4 with deepfake classifier" if image_model_loaded else "EfficientNet-B4 (feature extraction mode)"
                 },
                 "video_model": {
-                    "loaded": MODEL is not None,
-                    "model_name": "dima806/deepfake_detection" if MODEL else "Not loaded"
+                    "loaded": True,
+                    "model_name": "OpenCV-based forensic analysis"
                 },
-                "news_model": {
-                    "loaded": NEWS_MODEL is not None,
-                    "model_name": "mrm8488/bert-tiny-finetuned-fake-news" if NEWS_MODEL else "Not loaded"
+                "audio_model": {
+                    "loaded": True,
+                    "model_name": "Librosa-based heuristic analysis"
                 }
             }
         }
