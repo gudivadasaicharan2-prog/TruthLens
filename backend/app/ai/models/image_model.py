@@ -2,10 +2,10 @@
 TruthLens — EfficientNet-B4 Feature Extractor + Deepfake Classifier
 ====================================================================
 Architecture:
-  Backbone : EfficientNet-B4 (ImageNet pretrained, fully frozen)
+  Backbone : EfficientNet-B2 (ImageNet pretrained, fully frozen)
              Used purely as a feature extractor — no classification head
              from ImageNet survives.
-  Head     : DeepfakeClassifierHead — a small MLP (1792 -> 512 -> 1)
+  Head     : DeepfakeClassifierHead — a small MLP (1408 -> 512 -> 1)
              with a Sigmoid output, designed to accept deepfake-trained
              weights loaded from a checkpoint file.
 
@@ -38,7 +38,7 @@ import torch.nn as nn
 import numpy as np
 from PIL import Image
 import torchvision.transforms as T
-from torchvision.models import efficientnet_b4, EfficientNet_B4_Weights
+from torchvision.models import efficientnet_b2, EfficientNet_B2_Weights
 
 # ---------------------------------------------------------------------------
 # CHECKPOINT PATH — change only this constant to swap in trained weights.
@@ -47,28 +47,28 @@ from torchvision.models import efficientnet_b4, EfficientNet_B4_Weights
 #     torch.save(trained_head.state_dict(), "deepfake_classifier.pth")
 # Place that file at the path below, then restart the server.
 #
-# Resolved path: backend/weights/deepfake_classifier.pth
+# Resolved path: backend/backend/app/weights/deepfake_classifier.pth
 # ---------------------------------------------------------------------------
 CLASSIFIER_WEIGHTS_PATH: str = os.path.join(
     os.path.dirname(__file__),   # backend/app/ai/models/
-    "..", "..", "..", "weights",  # -> backend/weights/
+    "..", "..", "..", "backend", "app", "weights",  # -> backend/backend/app/weights/
     "deepfake_classifier.pth",
 )
 # ---------------------------------------------------------------------------
 
-# EfficientNet-B4 feature dimension after global average pooling
-_EFFICIENTNET_B4_FEATURES: int = 1792
+# EfficientNet-B2 feature dimension after global average pooling
+_EFFICIENTNET_B2_FEATURES: int = 1408
 
-# EfficientNet-B4 canonical input: 380x380, ImageNet normalisation
+# EfficientNet-B2 canonical input: 224x224, ImageNet normalisation
 _TRANSFORM = T.Compose([
-    T.Resize((380, 380)),
+    T.Resize((224, 224)),
     T.ToTensor(),
     T.Normalize(mean=[0.485, 0.456, 0.406],
                 std=[0.229, 0.224, 0.225]),
 ])
 
 # ---- Singleton state -------------------------------------------------------
-_BACKBONE: nn.Module | None = None         # frozen EfficientNet-B4 feature extractor
+_BACKBONE: nn.Module | None = None         # frozen EfficientNet-B2 feature extractor
 _CLASSIFIER: nn.Module | None = None       # DeepfakeClassifierHead instance
 _DEVICE: torch.device | None = None
 _WEIGHTS_LOADED: bool = False              # True only when trained checkpoint was found
@@ -78,13 +78,13 @@ _WEIGHTS_LOADED: bool = False              # True only when trained checkpoint w
 
 class DeepfakeClassifierHead(nn.Module):
     """
-    Lightweight MLP classifier on top of the frozen EfficientNet-B4 backbone.
+    Lightweight MLP classifier on top of the frozen EfficientNet-B2 backbone.
 
-    Input  : 1-D feature vector of length in_features (1792 for EffNet-B4)
+    Input  : 1-D feature vector of length in_features (1408 for EffNet-B2)
     Output : scalar in [0, 1]  — probability the image is a deepfake
 
     To train this head on a deepfake dataset:
-      1. Pair it with a frozen EfficientNet-B4 backbone.
+      1. Pair it with a frozen EfficientNet-B2 backbone.
       2. Train with BCELoss on labelled real/fake face crops.
       3. Save:  torch.save(head.state_dict(), "deepfake_classifier.pth")
       4. Update CLASSIFIER_WEIGHTS_PATH above and restart the server.
@@ -93,7 +93,7 @@ class DeepfakeClassifierHead(nn.Module):
     A trained checkpoint must match these exact key names.
     """
 
-    def __init__(self, in_features: int = _EFFICIENTNET_B4_FEATURES) -> None:
+    def __init__(self, in_features: int = _EFFICIENTNET_B2_FEATURES) -> None:
         super().__init__()
         self.fc1     = nn.Linear(in_features, 512)
         self.bn1     = nn.BatchNorm1d(512)
@@ -150,17 +150,17 @@ def load_model() -> None:
         return  # already initialised — no-op
 
     _DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"[IMAGE_MODEL] Initialising EfficientNet-B4 on {_DEVICE} ...")
+    print(f"[IMAGE_MODEL] Initialising EfficientNet-B2 on {_DEVICE} ...")
 
     # Step 1 + 2: Load full model, then discard the classifier head.
     # We keep only features (conv stages) + avgpool + flatten to get a
-    # 1792-dimensional feature vector per image.
-    full_model = efficientnet_b4(weights=EfficientNet_B4_Weights.IMAGENET1K_V1)
+    # 1408-dimensional feature vector per image.
+    full_model = efficientnet_b2(weights=EfficientNet_B2_Weights.IMAGENET1K_V1)
 
     backbone = nn.Sequential(
-        full_model.features,    # convolutional stages  (B, 1792, H', W')
-        full_model.avgpool,     # global average pool   (B, 1792, 1, 1)
-        nn.Flatten(),           # flatten               (B, 1792)
+        full_model.features,    # convolutional stages  (B, 1408, H', W')
+        full_model.avgpool,     # global average pool   (B, 1408, 1, 1)
+        nn.Flatten(),           # flatten               (B, 1408)
     )
 
     # Step 3: Freeze every backbone parameter permanently.
@@ -170,7 +170,7 @@ def load_model() -> None:
     _BACKBONE = backbone.eval().to(_DEVICE)
 
     # Step 4: Instantiate classifier head with random weights.
-    head = DeepfakeClassifierHead(in_features=_EFFICIENTNET_B4_FEATURES)
+    head = DeepfakeClassifierHead(in_features=_EFFICIENTNET_B2_FEATURES)
 
     # *** CHECKPOINT LOAD POINT *******************************************
     # To upgrade to deepfake-trained weights:
@@ -237,10 +237,10 @@ def predict_fake_probability(img_rgb: np.ndarray) -> float:
     _ensure_loaded()
     try:
         pil_img = Image.fromarray(img_rgb.astype(np.uint8)).convert("RGB")
-        tensor  = _TRANSFORM(pil_img).unsqueeze(0).to(_DEVICE)  # (1, 3, 380, 380)
+        tensor  = _TRANSFORM(pil_img).unsqueeze(0).to(_DEVICE)  # (1, 3, 224, 224)
 
         with torch.no_grad():
-            features  = _BACKBONE(tensor)            # (1, 1792)
+            features  = _BACKBONE(tensor)            # (1, 1408)
             raw_prob  = _CLASSIFIER(features)        # (1, 1)
             fake_prob = float(raw_prob.squeeze())    # scalar in [0, 1]
 
@@ -298,16 +298,31 @@ def get_all_face_crops(
     if boxes is None or probs is None or len(boxes) == 0:
         return []
 
-    h, w = img_rgb.shape[:2]
-    crops: list[np.ndarray] = []
 
-    for box, prob in zip(boxes, probs):
-        if prob is None or float(prob) < min_confidence:
-            continue
-        x1, y1, x2, y2 = [int(v) for v in box]
-        x1, y1 = max(0, x1), max(0, y1)
-        x2, y2 = min(w, x2), min(h, y2)
-        if x2 > x1 and y2 > y1:
-            crops.append(img_rgb[y1:y2, x1:x2])
-
-    return crops
+def get_full_model() -> nn.Module:
+    """
+    Get the full model (backbone + classifier) for Grad-CAM visualization.
+    
+    This function reconstructs the complete model by combining the frozen
+    backbone with the classifier head. This is needed for Grad-CAM which
+    requires the full forward pass to compute gradients.
+    
+    Returns:
+        Complete model (backbone + classifier) on the correct device.
+    """
+    _ensure_loaded()
+    
+    # Create a wrapper model that combines backbone and classifier
+    class FullModel(nn.Module):
+        def __init__(self, backbone, classifier):
+            super().__init__()
+            self.backbone = backbone
+            self.classifier = classifier
+        
+        def forward(self, x):
+            features = self.backbone(x)
+            output = self.classifier(features)
+            return output
+    
+    full_model = FullModel(_BACKBONE, _CLASSIFIER)
+    return full_model.eval().to(_DEVICE)

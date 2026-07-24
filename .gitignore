@@ -33,3 +33,34 @@ Thumbs.db
 *.log
 .vscode/
 .idea/
+# ----------------------------------------------------------------------
+# AI / Machine Learning
+# ----------------------------------------------------------------------
+
+# Datasets
+backend/TruthLensDataset/
+backend/datasets/
+backend/*.zip
+
+# Training outputs
+backend/experiments/
+backend/evaluation/
+backend/benchmark/
+backend/runs/
+backend/logs/
+
+# Model checkpoints
+backend/**/*.pt
+backend/**/*.pth
+backend/**/*.ckpt
+backend/**/*.onnx
+
+# Generated reports
+backend/benchmark*.csv
+backend/benchmark*.md
+backend/phase3_*.json
+backend/phase3_*.md
+backend/threshold_comparison.md
+
+# Python cache
+**/__pycache__/

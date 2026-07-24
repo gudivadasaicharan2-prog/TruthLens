@@ -1,0 +1,284 @@
+TruthLens Design System v1.0
+A premium dark-futuristic design language for AI forensics products
+
+1. Brand Foundation
+Product: TruthLens — AI Image Detection Platform Aesthetic: Dark futuristic · Glassmorphism · Cybersecurity · AI SaaS Inspiration: OpenAI · Linear · Perplexity · Adobe Firefly · Vercel · Apple Mode: Dark-only (color-scheme: dark)
+
+2. Color System
+All colors are authored in OKLCH for perceptual uniformity, with hex approximations for reference. Tokens live in src/styles.css under :root and are mapped into Tailwind via @theme inline.
+
+2.1 Core Palette
+Token	OKLCH	Hex (approx)	Usage
+--background	oklch(0.14 0.03 265)	#0B0F1E	App background (deep space)
+--foreground	oklch(0.98 0.005 260)	#F8F9FC	Primary text
+--card	oklch(0.19 0.035 265)	#141A2E	Card surface base
+--popover	oklch(0.18 0.035 265)	#12182B	Popovers, menus
+--muted	oklch(0.24 0.04 265)	#1C2340	Muted surface
+--muted-foreground	oklch(0.72 0.03 260)	#A6ADC2	Secondary text
+--border	oklch(1 0 0 / 10%)	rgba(255,255,255,.10)	Hairlines
+--input	oklch(1 0 0 / 12%)	rgba(255,255,255,.12)	Input surfaces
+--ring	oklch(0.72 0.19 265)	#7B8CFF	Focus ring
+2.2 Brand Accents
+Token	OKLCH	Hex	Role
+--blue	oklch(0.62 0.22 260)	#4F6BFF	Primary brand
+--violet	oklch(0.60 0.24 300)	#9A4DFF	Secondary brand
+--cyan	oklch(0.82 0.16 210)	#5FD9F5	Highlight / info
+--primary	oklch(0.72 0.19 265)	#7B8CFF	Interactive elements
+--accent	oklch(0.75 0.17 220)	#5FB8F0	Accents
+2.3 Semantic States
+Token	OKLCH	Hex	Usage
+--destructive	oklch(0.65 0.25 20)	#F04A38	Errors, "Likely AI" verdict
+Success	oklch(0.72 0.17 155)	#34D399 (emerald-400)	"Likely authentic" verdict
+Warning	oklch(0.82 0.16 210)	#5FD9F5 (cyan)	"Uncertain" verdict
+3. Gradients
+Signature gradients defined as CSS variables — always use these tokens, never hand-roll.
+
+--gradient-brand: linear-gradient(135deg,
+  oklch(0.62 0.22 260) 0%,
+  oklch(0.60 0.24 300) 50%,
+  oklch(0.82 0.16 210) 100%);
+
+--gradient-radial: radial-gradient(ellipse at top,
+  oklch(0.60 0.24 300 / 0.35),
+  transparent 60%);
+
+--gradient-mesh:
+  radial-gradient(at 20% 20%, oklch(0.62 0.22 260 / 0.35), transparent 50%),
+  radial-gradient(at 80% 10%, oklch(0.60 0.24 300 / 0.30), transparent 55%),
+  radial-gradient(at 60% 90%, oklch(0.82 0.16 210 / 0.25), transparent 55%);
+Utility	Applies
+bg-brand	Brand gradient (buttons, badges, icon tiles)
+text-gradient	Brand gradient clipped to text
+ring-glow	0 0 60px -10px oklch(0.62 0.22 260 / 0.55)
+4. Typography
+4.1 Font Families
+Loaded via <link> in src/routes/__root.tsx (never @import in CSS).
+
+Token	Family	Purpose
+--font-sans	Inter, ui-sans-serif, system-ui	Body, UI
+--font-display	Space Grotesk, ui-sans-serif, system-ui	Headings, numeric displays
+Headings automatically use font-display with letter-spacing: -0.02em.
+
+4.2 Weights
+Weight	Use
+400 Regular	Body, muted text
+500 Medium	Buttons, labels, active nav
+600 Semibold	Headings, KPIs, brand mark
+700 Bold	Reserved for hero display type only
+4.3 Type Scale
+Class	Size / Line	Usage
+text-xs	12 / 16	Meta, badges, uppercase eyebrows
+text-sm	14 / 20	Body small, nav links
+text-base	16 / 24	Body default
+text-lg	18 / 28	Section leads
+text-xl	20 / 28	Card titles
+text-2xl	24 / 32	Subsection headings
+text-3xl	30 / 36	Page titles
+text-4xl	36 / 40	H2
+text-5xl	48 / 1	Gauge value, H1
+text-6xl	60 / 1	Hero display
+text-7xl	72 / 1	Landing hero (desktop)
+Eyebrow pattern: text-xs uppercase tracking-widest text-muted-foreground
+
+5. Spacing Scale
+Tailwind's default 4px scale, standardized usage:
+
+Token	px	Usage
+1	4	Icon-to-text tight
+2	8	Chip padding, tight stacks
+3	12	Button padding-y, small gaps
+4	16	Card padding-sm, form gaps
+6	24	Card padding-md, section gaps
+8	32	Card padding-lg
+12	48	Section padding-y (mobile)
+16	64	Section padding-y (tablet)
+24	96	Section padding-y (desktop)
+Container: mx-auto w-[min(1200px,calc(100%-2rem))] — hard-coded max width for consistency.
+
+6. Border Radius
+Token	Value	Usage
+--radius	0.875rem (14px)	Base
+rounded-sm	10	Chips, small inputs
+rounded-md	12	Buttons, inputs
+rounded-lg	14	Nav pills, small cards
+rounded-xl	18	Standard cards
+rounded-2xl	22	Glass panels, navbar
+rounded-3xl	26	Hero cards, overlays
+rounded-full	∞	Avatars, gauge, particles
+7. Shadows & Glow
+--shadow-glow:  0 0 60px -10px oklch(0.62 0.22 260 / 0.55);
+--shadow-glass: 0 8px 40px -12px oklch(0.10 0.03 265 / 0.6);
+Level	Value	Usage
+shadow-xs	Default Tailwind	Inputs at rest
+shadow-sm	Default Tailwind	Cards at rest
+shadow-glass	Token	All glass surfaces
+shadow-glow	Token (ring-glow)	Primary CTAs, active tiles
+Drop-shadow glow	drop-shadow(0 0 12px oklch(0.60 0.24 300 / 0.6))	Gauge stroke, GradCAM overlay
+8. Glassmorphism
+Two authoritative utilities — do not create ad-hoc variants.
+
+8.1 .glass — Standard
+background: color-mix(in oklab, var(--card) 55%, transparent);
+backdrop-filter: blur(20px) saturate(140%);
+border: 1px solid oklch(1 0 0 / 0.08);
+box-shadow: var(--shadow-glass);
+Use for: sidebars, secondary cards, feed items.
+
+8.2 .glass-strong — Elevated
+background: color-mix(in oklab, var(--card) 75%, transparent);
+backdrop-filter: blur(28px) saturate(160%);
+border: 1px solid oklch(1 0 0 / 0.12);
+box-shadow: var(--shadow-glass);
+Use for: navbar, modals, overlays, hero panels, KPI cards.
+
+Never hand-write -webkit-backdrop-filter — Lightning CSS drops the standard property in production.
+
+9. Motion
+Powered by Framer Motion. Reduced-motion should be respected via prefers-reduced-motion.
+
+9.1 Durations
+Speed	Duration	Use
+Instant	150ms	Color/opacity hover
+Fast	200–250ms	Scale, tabs, small transitions
+Base	300–400ms	Page enter, card reveal
+Medium	600ms	Section stagger, KPI counters
+Slow	1.6s	Gauge fill
+Ambient	6s–32s	Background blobs, rotating rings
+9.2 Easing
+Curve	Use
+easeOut	Enters, reveals (default)
+easeInOut	Loops (blobs, particles, pulses)
+linear	Rotating rings
+spring { stiffness: 400, damping: 30 }	Active nav indicator (layoutId)
+9.3 Signature Animations
+Name	Pattern
+Page enter	initial={{opacity:0,y:8}} animate={{opacity:1,y:0}} duration:0.4
+Card stagger	children delay i * 0.05–0.1
+Hover lift	hover:scale-[1.02] or translate-y-[-2px]
+Gauge fill	animate(progress, target, {duration: 1.6, ease: "easeOut"})
+Ambient blob	x/y: [0, ±100, 0], duration 24–32s, infinite, easeInOut
+Pulse tile	scale: [1, 1.08, 1], 1.8s, infinite
+10. Iconography
+Library: lucide-react (exclusively — no mixed icon sets)
+Default size: h-4 w-4 (16px) inline, h-5 w-5 (20px) in tiles, h-6 w-6 (24px) in hero tiles
+Stroke: default (2px) — do not customize
+Color: inherit (currentColor), or text-cyan / text-violet for semantic emphasis
+Icon tiles: grid h-9 w-9 place-items-center rounded-xl bg-brand ring-glow with white icon
+11. Buttons
+Standard height: h-9 (compact) or h-11 (primary CTA). Base radius: rounded-lg (14px) or rounded-xl (18px) for hero CTAs.
+
+11.1 Variants
+Primary (Brand)
+
+className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-3.5 py-1.5
+           text-sm font-medium text-white ring-glow
+           transition-transform hover:scale-[1.02] active:scale-[0.98]"
+Secondary (Glass Outline)
+
+className="rounded-lg border border-white/10 bg-white/[0.02] px-3.5 py-1.5
+           text-sm text-muted-foreground hover:text-white hover:bg-white/5
+           transition-colors"
+Ghost
+
+className="rounded-lg px-3 py-1.5 text-sm text-muted-foreground
+           hover:bg-white/5 hover:text-white transition-colors"
+Destructive
+
+className="rounded-lg bg-destructive px-3.5 py-1.5 text-sm font-medium
+           text-destructive-foreground hover:opacity-90"
+Icon Button
+
+className="grid h-9 w-9 place-items-center rounded-lg border border-white/10
+           text-muted-foreground hover:text-white hover:bg-white/5"
+11.2 States
+Hover: scale 1.02 (primary), background-tint (others), 200ms
+Active: scale 0.98
+Focus-visible: focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background
+Disabled: opacity-50 cursor-not-allowed pointer-events-none
+12. Cards
+12.1 Base Card
+className="glass rounded-2xl p-6 transition-all
+           hover:border-white/20 hover:-translate-y-0.5"
+12.2 Elevated / Feature Card
+className="glass-strong rounded-3xl p-8"
+12.3 KPI Card
+<div className="glass rounded-2xl p-4">
+  <div className="text-xs uppercase tracking-widest text-muted-foreground">Label</div>
+  <div className="mt-2 font-display text-3xl font-semibold text-gradient">Value</div>
+</div>
+12.4 Gradient-Border Card (Premium)
+<div className="relative rounded-2xl p-[1px] bg-brand">
+  <div className="rounded-2xl bg-card p-6">…</div>
+</div>
+13. Inputs
+Base
+
+className="h-11 w-full rounded-lg border border-white/10 bg-white/[0.04]
+           px-3.5 text-sm text-foreground placeholder:text-muted-foreground
+           focus:border-white/20 focus:bg-white/[0.06]
+           focus:ring-2 focus:ring-ring/40 outline-none
+           transition-colors"
+Textarea: same, add min-h-[120px] py-3 resize-y.
+
+File / Dropzone
+
+className="glass rounded-2xl border-2 border-dashed border-white/15 p-10
+           text-center hover:border-white/30 hover:bg-white/[0.03]
+           transition-colors cursor-pointer"
+Label: text-sm font-medium text-foreground mb-1.5 Helper text: text-xs text-muted-foreground mt-1.5 Error text: text-xs text-destructive mt-1.5
+
+14. Navigation
+14.1 Navbar
+Sticky, top-4, z-50, glass-strong, rounded-2xl
+Active link: shared layoutId="nav-active" pill with bg-white/10
+Spring transition (400/30) for magnetic feel
+14.2 Sidebar
+Width w-64, hidden below lg
+Sticky, top-28, glass, rounded-2xl
+Active item: bg-white/10 + 2px left accent bar bg-brand
+15. Data Visualization (Recharts)
+Palette: --blue, --violet, --cyan (in that priority order)
+Grid: stroke="oklch(1 0 0 / 0.06)"
+Axes: stroke="oklch(0.72 0.03 260)", fontSize={11}, font-sans
+Tooltip: .glass-strong rounded-lg p-2 text-xs
+Area fills: gradient from --blue @ 0.4 → transparent
+Animation: isAnimationActive on, duration 800ms, easeOut
+16. Responsive Breakpoints
+Tailwind defaults, standardized behavior:
+
+Prefix	Min-width	Layout shift
+(base)	0	Single column, sidebar hidden, mobile nav
+sm:	640px	Two-column grids appear
+md:	768px	Desktop navbar links visible
+lg:	1024px	Sidebar visible, 3-col grids
+xl:	1280px	4-col grids, wider gutters
+2xl:	1536px	Max container reached
+Rules
+
+Hero: text-5xl md:text-6xl lg:text-7xl
+Section padding: py-12 md:py-16 lg:py-24
+Grid: grid-cols-1 sm:grid-cols-2 lg:grid-cols-3
+Touch targets: minimum 44×44px
+17. Z-Index Scale
+Layer	z	Use
+Background	-z-10	AnimatedBackground
+Base	0	Content
+Sticky	10–20	Sticky sidebars
+Navbar	50	Top nav
+Overlay	80	Modals, AIScanOverlay
+Toast	100	Notifications
+18. Accessibility
+Contrast: all text ≥ WCAG AA on dark background
+Focus rings: always visible via focus-visible:ring-2 ring-ring
+Motion: respect prefers-reduced-motion (disable ambient blobs, gauge fills instantly)
+Semantic HTML: <main>, <nav>, <header>, <section> with headings
+ARIA on live regions (aria-live="polite" on scan overlay, gauges)
+19. File Location Reference
+Concern	Path
+Tokens & utilities	src/styles.css
+Fonts <link>	src/routes/__root.tsx (head)
+Global background	src/components/AnimatedBackground.tsx
+Navbar / Sidebar	src/components/Navbar.tsx, Sidebar.tsx
+Page shell	src/components/PageShell.tsx
+Charts	Recharts + tokens above
+End of specification — TruthLens Design System v1.0

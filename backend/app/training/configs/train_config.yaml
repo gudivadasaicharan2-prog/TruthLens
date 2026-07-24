@@ -1,0 +1,75 @@
+# TruthLens Training Configuration
+# ================================
+# Configuration for training AI content detection models
+
+# Experiment Configuration
+experiment:
+  base_dir: experiments  # Base directory for experiments
+  name: null  # Custom experiment name (null = auto-generate)
+  validate_data: true  # Validate metadata before training
+  save_validation_report: true  # Save validation report
+  save_history: true  # Save training history JSON
+  save_plots: true  # Generate training plots
+
+# Model Configuration
+model:
+  architecture: efficientnet_b4  # Options: efficientnet_b4, convnext_tiny, resnet50
+  num_classes: 2  # Binary classification (real vs AI)
+  pretrained: true  # Use pretrained weights
+  dropout: 0.3  # Dropout probability for classifier
+  freeze_backbone: false  # Freeze backbone for transfer learning
+
+# Data Configuration
+data:
+  train_metadata: backend/TruthLensDataset/metadata.csv  # Path to training metadata
+  val_metadata: backend/TruthLensDataset/metadata.csv  # Path to validation metadata
+  dataset_dir: backend/TruthLensDataset  # Base directory containing images
+  image_size: 224  # Input image size
+  batch_size: 32  # Batch size for training
+  num_workers: 4  # Number of data loading workers
+  pin_memory: true  # Pin memory for faster GPU transfer
+  augment: true  # Apply data augmentation
+  balanced_sampling: true  # Balance sampling across AI generators
+  samples_per_generator: null  # Samples per generator (null = use minimum)
+
+# Training Configuration
+training:
+  epochs: 50  # Number of training epochs
+  seed: 42  # Random seed for reproducibility
+  deterministic: false  # Enable deterministic training (slower)
+  
+  # Optimizer Configuration
+  optimizer:
+    type: adamw  # Options: adam, adamw, sgd
+    lr: 0.0001  # Learning rate
+    weight_decay: 0.01  # Weight decay (L2 regularization)
+    # momentum: 0.9  # For SGD optimizer
+  
+  # Learning Rate Scheduler
+  scheduler:
+    type: cosine  # Options: step, cosine, plateau, null
+    # step_size: 10  # For step scheduler
+    # gamma: 0.1  # For step scheduler
+    # T_max: 50  # For cosine scheduler (usually = epochs)
+    # factor: 0.1  # For plateau scheduler
+    # patience: 5  # For plateau scheduler
+  
+  # Loss Configuration
+  # class_weights: [1.0, 1.0]  # Weights for [real, AI] classes
+  
+  # Mixed Precision Training
+  mixed_precision: true  # Use automatic mixed precision (AMP)
+  
+  # Checkpoint Configuration
+  save_best_only: true  # Save only the best model
+  max_checkpoints: 3  # Maximum number of checkpoints to keep
+  resume: false  # Resume from latest checkpoint
+  
+  # Early Stopping
+  early_stopping:
+    enabled: true
+    patience: 7  # Epochs to wait before stopping
+    min_delta: 0.001  # Minimum change to qualify as improvement
+  
+  # TensorBoard Logging
+  use_tensorboard: true  # Enable TensorBoard logging

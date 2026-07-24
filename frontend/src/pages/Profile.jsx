@@ -3,17 +3,16 @@ import { motion } from 'framer-motion';
 import {
   User, Mail, Shield, Calendar, Settings, Bell, Lock,
   Activity, Clock, ArrowRight, Edit, CheckCircle2,
-  AlertTriangle, Image as ImageIcon, Video, Mic, Brain, Globe
+  AlertTriangle, Image as ImageIcon, Video, Brain, Globe
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { getUserHistory, getUserProfile } from '../services/api';
 import { useNavigate } from 'react-router-dom';
 
-const TYPE_ICONS = { image: ImageIcon, video: Video, audio: Mic };
+const TYPE_ICONS = { image: ImageIcon, video: Video };
 const TYPE_COLORS = {
   image: { text: 'text-cyan-400', bg: 'bg-cyan-500/10', border: 'border-cyan-500/20' },
   video: { text: 'text-purple-400', bg: 'bg-purple-500/10', border: 'border-purple-500/20' },
-  audio: { text: 'text-green-400', bg: 'bg-green-500/10', border: 'border-green-500/20' },
 };
 
 const verdictColor = (v = '') => {
@@ -55,7 +54,6 @@ const Profile = () => {
   const byType = {
     Image: history.filter(h => (h.type || '').toLowerCase() === 'image').length,
     Video: history.filter(h => (h.type || '').toLowerCase() === 'video').length,
-    Audio: history.filter(h => (h.type || '').toLowerCase() === 'audio').length,
   };
 
   const overviewStats = [

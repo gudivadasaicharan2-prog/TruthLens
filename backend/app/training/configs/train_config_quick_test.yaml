@@ -1,0 +1,64 @@
+# TruthLens Training Configuration - Quick Test
+# ===========================================
+# Quick test configuration for verifying the pipeline (2 epochs)
+
+# Experiment Configuration
+experiment:
+  base_dir: experiments
+  name: cifake_quick_test
+  validate_data: true
+  save_validation_report: true
+  save_history: true
+  save_plots: true
+
+# Model Configuration
+model:
+  architecture: efficientnet_b4
+  num_classes: 2
+  pretrained: true
+  dropout: 0.3
+  freeze_backbone: false
+
+# Data Configuration
+data:
+  train_metadata: backend/TruthLensDataset/metadata.csv
+  val_metadata: backend/TruthLensDataset/metadata.csv
+  dataset_dir: backend/TruthLensDataset
+  image_size: 224
+  batch_size: 32
+  num_workers: 4
+  pin_memory: true
+  augment: true
+  balanced_sampling: true
+  samples_per_generator: null
+
+# Training Configuration
+training:
+  epochs: 2  # Quick test with only 2 epochs
+  seed: 42
+  deterministic: false
+  
+  # Optimizer Configuration
+  optimizer:
+    type: adamw
+    lr: 0.0001
+    weight_decay: 0.01
+  
+  # Learning Rate Scheduler
+  scheduler:
+    type: cosine
+  
+  # Mixed Precision Training
+  mixed_precision: true
+  
+  # Checkpoint Configuration
+  save_best_only: true
+  max_checkpoints: 3
+  resume: false
+  
+  # Early Stopping (disabled for quick test)
+  early_stopping:
+    enabled: false
+  
+  # TensorBoard Logging
+  use_tensorboard: true

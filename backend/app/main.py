@@ -26,7 +26,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="TruthLens API",
     version="2.0.0",
-    description="AI Content Authenticity & Deepfake Detection Platform",
+    description="AI Image & Video Authenticity Platform",
     lifespan=lifespan,
 )
 
@@ -49,8 +49,7 @@ app.add_middleware(
 )
 
 # Create upload dirs
-for d in ["./uploads/images", "./uploads/videos",
-          "./uploads/audio", "./uploads/frames"]:
+for d in ["./uploads/images", "./uploads/videos", "./uploads/frames"]:
     os.makedirs(d, exist_ok=True)
 
 @app.get("/health")
@@ -59,7 +58,7 @@ def health():
         "status": "ok",
         "message": "TruthLens API v2 running",
         "version": "2.0.0",
-        "platform": "AI Content Authenticity & Deepfake Detection"
+        "platform": "AI Image & Video Authenticity"
     }
 
 # Register routers safely
@@ -75,8 +74,6 @@ def register(module_path, prefix, tag):
 register("app.api.v1.auth",      "/api/v1/auth",      "Auth")
 register("app.api.v1.image",     "/api/v1/image",     "Image")
 register("app.api.v1.video",     "/api/v1/video",     "Video")
-register("app.api.v1.audio",     "/api/v1/audio",     "Audio")
-register("app.api.v1.dashboard", "/api/v1/users", "Dashboard")
 register("app.api.v1.users",     "/api/v1/users",     "Users")
 register("app.api.v1.health",    "/api/v1/health",    "Health")
 # NOTE: news and factcheck routes removed — platform is now media-only (ASCII safe comment)

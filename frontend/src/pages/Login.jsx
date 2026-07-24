@@ -204,9 +204,6 @@ const Login = () => {
                 />
                 <span className="text-sm text-text-secondary">Remember me</span>
               </label>
-              <Link to="/forgot-password" className="text-sm text-cyan-400 hover:text-cyan-300 transition-colors">
-                Forgot password?
-              </Link>
             </div>
 
             <button

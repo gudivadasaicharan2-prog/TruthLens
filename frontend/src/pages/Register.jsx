@@ -326,14 +326,7 @@ const Register = () => {
                   className="w-5 h-5 mt-0.5 rounded border-navy-700 bg-navy-900 text-cyan-400 focus:ring-cyan-400 focus:ring-offset-0"
                 />
                 <span className="text-sm text-text-secondary">
-                  I agree to the{' '}
-                  <Link to="/terms" className="text-cyan-400 hover:text-cyan-300 transition-colors">
-                    Terms of Service
-                  </Link>{' '}
-                  and{' '}
-                  <Link to="/privacy" className="text-cyan-400 hover:text-cyan-300 transition-colors">
-                    Privacy Policy
-                  </Link>
+                  I agree to the Terms of Service and Privacy Policy
                 </span>
               </label>
               {errors.agreeTerms && <p className="text-red-500 text-sm mt-1">{errors.agreeTerms}</p>}

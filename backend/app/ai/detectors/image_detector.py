@@ -1,16 +1,19 @@
 """
-TruthLens — Image Authenticity Analyzer (v5 — Multi-Signal Fusion)
+TruthLens — Image Authenticity Analyzer (v6 — Configurable Fusion)
 ===================================================================
 Pipeline (runs for every image, regardless of whether faces are present):
 
-  [1] Whole-image AI score    EfficientNet-B4 on the full image
-  [2] Face deepfake score     EfficientNet-B4 on each face crop (optional)
+  [1] Whole-image AI score    EfficientNet-B2 on the full image
+  [2] Face deepfake score     EfficientNet-B2 on each face crop (optional)
   [3] Forensic bundle         ELA · Noise · Frequency · Texture · Color · EXIF
   [4] Fusion engine           Weighted combination → final_fake_prob → verdict
 
-Signal weights:
-  Faces found  : whole-image 55%  +  face 30%  +  forensic 15%
-  No faces     : whole-image 75%                +  forensic 25%
+Signal weights: Configurable via fusion_config.py
+  - Document pipeline: forensic-heavy
+  - Artwork pipeline: whole-image + forensic
+  - Landscape pipeline: whole-image + forensic
+  - Portrait pipeline: face-heavy
+  - Default: adaptive based on image type
 
 Verdict set (exactly 5, as required):
   Authentic | Likely Authentic | Suspicious | AI Generated | Deepfake
@@ -22,11 +25,10 @@ Verdict set (exactly 5, as required):
   "Authentic"    — strong authentic signal across all channels
 
 Confidence calibration:
-  logistic(|fake_prob - 0.5| * 12) ensures:
-    clear cases  (prob >= 0.85 or <= 0.15) -> confidence >= 0.92
-    borderline   (prob ~  0.50)            -> confidence ~  0.55
+  logistic(|fake_prob - 0.5| * scale) ensures configurable confidence
 
 JSON response: identical to v4 — zero frontend changes required.
+  - New fields: module_contributions, explanation (backward compatible additions)
 """
 
 import cv2
@@ -35,6 +37,7 @@ from PIL import Image
 import os
 import gc
 import math
+import torch
 
 # ── Face detection (MTCNN — RetinaFace-class) ─────────────────────────────────
 from app.ai.models.face_detector import detect_faces_with_boxes
@@ -54,9 +57,52 @@ from app.ai.forensics.frequency import frequency_domain_score
 from app.ai.forensics.texture import texture_uniformity_score
 from app.ai.forensics.color_analysis import color_channel_anomaly
 from app.ai.forensics.metadata import extract_exif, get_device_name, exif_authenticity_score
+from app.ai.forensics.edge import edge_consistency_score
 
 # ── Image type classifier ─────────────────────────────────────────────────────
 from app.ai.classification.image_type_classifier import classify_image_type
+
+# ── CLIP detector ─────────────────────────────────────────────────────────────
+from app.ai.detectors.clip_detector import detect_with_clip, should_use_clip, get_clip_ensemble_weight
+
+# ── Fusion configuration ─────────────────────────────────────────────────────
+from app.ai.detectors.fusion_config import FusionConfig
+
+# ── Explainability (Grad-CAM) ─────────────────────────────────────────────────
+from app.ai.explainability.gradcam import get_gradcam_generator
+from app.ai.models.image_model import get_full_model
+import torchvision.transforms as T
+
+# ── Report Generation ─────────────────────────────────────────────────────────
+from app.reporting.report_generator import generate_report
+
+# ── Grad-CAM singleton for performance optimization ─────────────────────────────
+_GRADCAM_GENERATOR = None
+_GRADCAM_DEVICE = None
+
+
+def _get_gradcam_generator():
+    """
+    Get or create the Grad-CAM generator singleton.
+    
+    This optimizes inference speed by reusing the same Grad-CAM generator
+    across multiple requests, avoiding repeated model loading and hook registration.
+    
+    Returns:
+        GradCAMGenerator instance
+    """
+    global _GRADCAM_GENERATOR, _GRADCAM_DEVICE
+    
+    # Determine device
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    
+    # Recreate if device changed or not initialized
+    if _GRADCAM_GENERATOR is None or _GRADCAM_DEVICE != device:
+        model = get_full_model()
+        _GRADCAM_GENERATOR = get_gradcam_generator(model, device)
+        _GRADCAM_DEVICE = device
+    
+    return _GRADCAM_GENERATOR
 
 
 # =============================================================================
@@ -106,26 +152,23 @@ def _forensic_bundle(
     img_array: np.ndarray,
     pil_img: Image.Image,
     exif: dict,
-) -> tuple[float, list[str]]:
+) -> tuple[float, list[str], dict]:
     """
     Run all forensic analyses and fuse them into a single forensic score.
 
-    Signals and their weights within the bundle:
-      ELA variance          25%  — compression artifact analysis
-      Noise/splicing        20%  — quadrant noise inconsistency
-      Frequency domain      20%  — FFT spectral anomalies
-      Texture uniformity    20%  — GAN/diffusion over-smoothing
-      Color anomaly         10%  — R-B correlation and hue flatness
-      EXIF consistency       5%  — metadata integrity (low weight: easily stripped)
+    Uses configurable weights from FusionConfig.FORENSIC_WEIGHTS.
 
     Returns:
-        (forensic_score: float [0,1], findings: list[str])
+        (forensic_score: float [0,1], findings: list[str], contributions: dict)
         forensic_score 1 = strongly fake; 0 = strongly authentic.
+        contributions: dictionary of individual module scores
     """
     findings: list[str] = []
+    contributions = {}
 
     # --- ELA ---
     ela_var, ela_signal = ela_score(pil_img)
+    contributions['ela'] = ela_signal
     if ela_var > 800:
         findings.append(
             f"✗ ELA detected abnormal compression artifacts (variance: {ela_var:.0f})"
@@ -135,6 +178,7 @@ def _forensic_bundle(
 
     # --- Noise / splicing ---
     noise_var, noise_signal = noise_splice_score(gray)
+    contributions['noise'] = noise_signal
     if noise_var > 25:
         findings.append(
             f"✗ Inconsistent sensor noise across quadrants — possible splicing "
@@ -145,6 +189,7 @@ def _forensic_bundle(
 
     # --- Frequency domain ---
     freq_signal = frequency_domain_score(gray)
+    contributions['frequency'] = freq_signal
     if freq_signal > 0.5:
         findings.append("✗ Anomalous frequency spectrum — unnatural spectral signature")
     else:
@@ -152,6 +197,7 @@ def _forensic_bundle(
 
     # --- Texture uniformity ---
     texture_signal = texture_uniformity_score(gray)
+    contributions['texture'] = texture_signal
     if texture_signal > 0.62:
         findings.append(
             "✗ Texture uniformity suggests AI generation "
@@ -162,25 +208,42 @@ def _forensic_bundle(
             "✓ Natural texture variation consistent with camera imagery"
         )
 
+    # --- Edge consistency ---
+    edge_signal = edge_consistency_score(gray)
+    contributions['edge'] = edge_signal
+    if edge_signal > 0.5:
+        findings.append(
+            "✗ Unnatural edge patterns detected "
+            "(characteristic of AI-generated images)"
+        )
+    else:
+        findings.append(
+            "✓ Natural edge consistency consistent with camera imagery"
+        )
+
     # --- Color channel anomaly ---
     color_signal = color_channel_anomaly(img_array)
+    contributions['color'] = color_signal
 
     # --- EXIF consistency (inverted: high authenticity = low fake score) ---
     exif_auth = exif_authenticity_score(exif)
     exif_signal = 1.0 - exif_auth   # convert to fake-score
+    contributions['exif'] = exif_signal
 
-    # --- Weighted forensic score ---
+    # --- Weighted forensic score using configurable weights ---
+    weights = FusionConfig.FORENSIC_WEIGHTS
     forensic_score = (
-        0.25 * ela_signal
-        + 0.20 * noise_signal
-        + 0.20 * freq_signal
-        + 0.20 * texture_signal
-        + 0.10 * color_signal
-        + 0.05 * exif_signal
+        weights['ela'] * ela_signal
+        + weights['noise'] * noise_signal
+        + weights['frequency'] * freq_signal
+        + weights['texture'] * texture_signal
+        + weights['edge'] * edge_signal
+        + weights['color'] * color_signal
+        + weights['exif'] * exif_signal
     )
     forensic_score = round(min(max(forensic_score, 0.0), 1.0), 4)
 
-    return forensic_score, findings
+    return forensic_score, findings, contributions
 
 
 # =============================================================================
@@ -191,18 +254,14 @@ def _calibrate_confidence(fake_prob: float) -> float:
     """
     Map a fake probability to a display confidence using logistic calibration.
 
-    Uses the distance from the 0.5 decision boundary, scaled by 12, through
-    a sigmoid.  This produces:
-      |prob - 0.5| = 0.00  ->  confidence = 0.50  (perfectly ambiguous)
-      |prob - 0.5| = 0.20  ->  confidence = 0.73
-      |prob - 0.5| = 0.35  ->  confidence = 0.93  (clear verdict)
-      |prob - 0.5| = 0.45  ->  confidence = 0.98  (very clear verdict)
+    Uses configurable scale factor from FusionConfig.CONFIDENCE_CALIBRATION.
 
-    Returns: float in [0.50, 0.99].
+    Returns: float in [min_confidence, max_confidence].
     """
+    config = FusionConfig.CONFIDENCE_CALIBRATION
     distance = abs(fake_prob - 0.5)          # in [0, 0.5]
-    calibrated = 1.0 / (1.0 + math.exp(-distance * 12.0))
-    return round(min(max(calibrated, 0.50), 0.99), 2)
+    calibrated = 1.0 / (1.0 + math.exp(-distance * config['scale']))
+    return round(min(max(calibrated, config['min_confidence']), config['max_confidence']), 2)
 
 
 # =============================================================================
@@ -213,40 +272,77 @@ def _fusion_engine(
     whole_image_score: float,
     face_score: float | None,   # None when no faces were detected
     forensic_score: float,
-) -> tuple[str, float, float, float, float]:
+    forensic_contributions: dict,
+    image_type: str = "mixed_scene",
+    recommended_pipeline: str = "whole_image",
+    clip_score: float | None = None,   # CLIP score (optional)
+) -> tuple[str, float, float, float, float, dict]:
     """
     Combine all signals into a final verdict, confidence, and probabilities.
 
-    Weights:
-      With faces:  whole-image 55% + face 30% + forensic 15%
-      No faces:    whole-image 75%            + forensic 25%
-
-    Verdict discrimination:
-      "Deepfake"      — face deepfake score dominates and is high
-      "AI Generated"  — whole-image score is high (works for non-face images)
-      "Suspicious"    — inconclusive mid-range
-      "Likely Authentic" — leaning real with minor anomalies
-      "Authentic"     — strong authentic signal
+    Uses configurable weights from FusionConfig based on image type and pipeline.
+Now includes CLIP contribution for enhanced AI detection.
 
     Returns:
-        (verdict, confidence, ai_probability, deepfake_probability, final_fake_prob)
+        (verdict, confidence, ai_probability, deepfake_probability, final_fake_prob, contributions)
+        contributions: dictionary tracking each module's contribution to final score
     """
-    # --- Weighted fusion ---
-    if face_score is not None:
-        final_fake_prob = (
-            0.55 * whole_image_score
-            + 0.30 * face_score
-            + 0.15 * forensic_score
-        )
+    # Get pipeline weights from configuration
+    weights = FusionConfig.get_pipeline_weights(recommended_pipeline, image_type)
+    
+    # Get CLIP weight based on image type
+    clip_weight = get_clip_ensemble_weight(image_type)
+    
+    # Adjust weights to accommodate CLIP
+    if clip_score is not None and clip_weight > 0:
+        # Normalize existing weights to make room for CLIP
+        total_existing_weight = weights['whole_image'] + weights['face'] + weights['forensic']
+        if total_existing_weight > 0:
+            scale_factor = (1.0 - clip_weight) / total_existing_weight
+            weights['whole_image'] *= scale_factor
+            weights['face'] *= scale_factor
+            weights['forensic'] *= scale_factor
     else:
-        final_fake_prob = (
-            0.75 * whole_image_score
-            + 0.25 * forensic_score
-        )
-
+        clip_weight = 0.0
+    
+    # Calculate weighted fusion with CLIP
+    final_fake_prob = (
+        weights['whole_image'] * whole_image_score
+        + weights['face'] * (face_score or 0.0)
+        + weights['forensic'] * forensic_score
+        + clip_weight * (clip_score or 0.0)
+    )
     final_fake_prob = round(min(max(final_fake_prob, 0.0), 1.0), 4)
+    
+    # Track module contributions
+    contributions = {
+        'whole_image': {
+            'score': whole_image_score,
+            'weight': weights['whole_image'],
+            'contribution': weights['whole_image'] * whole_image_score
+        },
+        'face': {
+            'score': face_score if face_score is not None else 0.0,
+            'weight': weights['face'],
+            'contribution': weights['face'] * (face_score or 0.0)
+        },
+        'forensic': {
+            'score': forensic_score,
+            'weight': weights['forensic'],
+            'contribution': weights['forensic'] * forensic_score,
+            'sub_modules': forensic_contributions
+        },
+        'clip': {
+            'score': clip_score if clip_score is not None else 0.0,
+            'weight': clip_weight,
+            'contribution': clip_weight * (clip_score or 0.0),
+            'enabled': clip_score is not None and clip_weight > 0
+        }
+    }
 
-    # --- Verdict selection ---
+    # --- Verdict selection using configurable thresholds ---
+    thresholds = FusionConfig.VERDICT_THRESHOLDS
+    
     # Determine whether face signal or whole-image signal dominates
     face_dominated = (
         face_score is not None
@@ -254,14 +350,13 @@ def _fusion_engine(
         and face_score > whole_image_score * 0.85
     )
 
-    if final_fake_prob >= 0.82:
+    if final_fake_prob >= thresholds['deepfake']:
         verdict = "Deepfake" if face_dominated else "AI Generated"
-    elif final_fake_prob >= 0.68:
-        # High-confidence suspicious: distinguish type by dominant signal
+    elif final_fake_prob >= thresholds['ai_generated']:
         verdict = "Deepfake" if face_dominated else "AI Generated"
-    elif final_fake_prob >= 0.50:
+    elif final_fake_prob >= thresholds['suspicious']:
         verdict = "Suspicious"
-    elif final_fake_prob >= 0.30:
+    elif final_fake_prob >= thresholds['likely_authentic']:
         verdict = "Likely Authentic"
     else:
         verdict = "Authentic"
@@ -269,26 +364,128 @@ def _fusion_engine(
     # --- Confidence calibration ---
     confidence = _calibrate_confidence(final_fake_prob)
 
-    # --- ai_probability / deepfake_probability for frontend display ---
+    # --- ai_probability / deepfake_probability using configurable multipliers ---
+    multipliers = FusionConfig.AI_PROBABILITY_MULTIPLIERS.get(verdict, {})
+    
     if verdict == "Deepfake":
         # Face-swap dominant: face prob → deepfake %, whole-image → ai %
-        ai_prob  = round(min(max(whole_image_score * 60.0, 5.0), 55.0), 1)
-        df_prob  = round(min((face_score or final_fake_prob) * 115.0, 98.0), 1)
+        ai_prob  = round(min(max(whole_image_score * multipliers.get('ai', 60.0), 5.0), 55.0), 1)
+        df_prob  = round(min((face_score or final_fake_prob) * multipliers.get('deepfake', 115.0), 98.0), 1)
     elif verdict == "AI Generated":
         # Whole-image dominant
-        ai_prob  = round(min(whole_image_score * 118.0, 98.0), 1)
-        df_prob  = round(max(final_fake_prob * 18.0, 2.0), 1)
+        ai_prob  = round(min(whole_image_score * multipliers.get('ai', 118.0), 98.0), 1)
+        df_prob  = round(max(final_fake_prob * multipliers.get('deepfake', 18.0), 2.0), 1)
     elif verdict == "Suspicious":
-        ai_prob  = round(final_fake_prob * 75.0, 1)
-        df_prob  = round(final_fake_prob * 55.0, 1)
+        ai_prob  = round(final_fake_prob * multipliers.get('ai', 75.0), 1)
+        df_prob  = round(final_fake_prob * multipliers.get('deepfake', 55.0), 1)
     elif verdict == "Likely Authentic":
-        ai_prob  = round(final_fake_prob * 28.0, 1)
-        df_prob  = round(final_fake_prob * 18.0, 1)
+        ai_prob  = round(final_fake_prob * multipliers.get('ai', 28.0), 1)
+        df_prob  = round(final_fake_prob * multipliers.get('deepfake', 18.0), 1)
     else:  # Authentic
-        ai_prob  = round(max(final_fake_prob * 14.0, 1.0), 1)
-        df_prob  = round(max(final_fake_prob * 9.0,  1.0), 1)
+        ai_prob  = round(max(final_fake_prob * multipliers.get('ai', 14.0), 1.0), 1)
+        df_prob  = round(max(final_fake_prob * multipliers.get('deepfake', 9.0),  1.0), 1)
 
-    return verdict, confidence, ai_prob, df_prob, final_fake_prob
+    return verdict, confidence, ai_prob, df_prob, final_fake_prob, contributions
+
+
+# =============================================================================
+# Explanation Generator
+# =============================================================================
+
+def _generate_explanation(
+    verdict: str,
+    final_fake_prob: float,
+    contributions: dict,
+    findings: list[str],
+    clip_reason: str = "",
+) -> dict:
+    """
+    Generate detailed explanation for the prediction.
+    
+    Returns:
+        dict with 'for_ai' and 'against_ai' lists
+    """
+    for_ai = []
+    against_ai = []
+    
+    # Analyze contributions
+    whole_image_contrib = contributions['whole_image']['contribution']
+    face_contrib = contributions['face']['contribution']
+    forensic_contrib = contributions['forensic']['contribution']
+    clip_contrib = contributions['clip']['contribution']
+    clip_enabled = contributions['clip']['enabled']
+    
+    # Whole-image analysis
+    if whole_image_contrib > 0.35:
+        for_ai.append(
+            f"EfficientNet-B2 classifier detected strong AI patterns "
+            f"(contribution: {whole_image_contrib:.3f})"
+        )
+    elif whole_image_contrib < 0.15:
+        against_ai.append(
+            f"EfficientNet-B2 classifier detected authentic characteristics "
+            f"(contribution: {whole_image_contrib:.3f})"
+        )
+    
+    # Face analysis
+    if face_contrib > 0.15:
+        for_ai.append(
+            f"Face deepfake analysis detected anomalies "
+            f"(contribution: {face_contrib:.3f})"
+        )
+    elif face_contrib < 0.05:
+        against_ai.append(
+            f"Face analysis detected no deepfake indicators "
+            f"(contribution: {face_contrib:.3f})"
+        )
+    
+    # CLIP analysis
+    if clip_enabled:
+        if clip_contrib > 0.2:
+            for_ai.append(
+                f"CLIP semantic analysis indicates AI-generated content "
+                f"(contribution: {clip_contrib:.3f})"
+            )
+            if clip_reason:
+                for_ai.append(clip_reason)
+        elif clip_contrib < 0.1:
+            against_ai.append(
+                f"CLIP semantic analysis indicates authentic content "
+                f"(contribution: {clip_contrib:.3f})"
+            )
+            if clip_reason:
+                against_ai.append(clip_reason)
+    
+    # Forensic analysis
+    forensic_sub = contributions['forensic']['sub_modules']
+    strong_forensic_ai = [k for k, v in forensic_sub.items() if v > 0.6]
+    strong_forensic_real = [k for k, v in forensic_sub.items() if v < 0.3]
+    
+    if strong_forensic_ai:
+        for_ai.append(
+            f"Forensic analysis detected AI indicators in: "
+            f"{', '.join(strong_forensic_ai)}"
+        )
+    if strong_forensic_real:
+        against_ai.append(
+            f"Forensic analysis detected authentic patterns in: "
+            f"{', '.join(strong_forensic_real)}"
+        )
+    
+    # Overall probability
+    if final_fake_prob > 0.7:
+        for_ai.append(
+            f"Overall AI probability is high ({final_fake_prob:.1%})"
+        )
+    elif final_fake_prob < 0.3:
+        against_ai.append(
+            f"Overall AI probability is low ({final_fake_prob:.1%})"
+        )
+    
+    return {
+        'for_ai': for_ai,
+        'against_ai': against_ai
+    }
 
 
 # =============================================================================
@@ -373,11 +570,13 @@ async def analyze_image(image_path: str) -> dict:
     # Run image type classifier
     classification = classify_image_type(img_array, face_count)
     image_type = classification["image_type"]
+    image_type_confidence = classification["image_type_confidence"]
     recommended_pipeline = classification["recommended_pipeline"]
+    heuristics = classification["heuristics"]
     
     print(
         f"[IMAGE v5] has_exif={has_exif}, faces={face_count}, "
-        f"type={image_type}, pipeline={recommended_pipeline}"
+        f"type={image_type}, conf={image_type_confidence}, pipeline={recommended_pipeline}"
     )
 
     # ── Pipeline Routing ─────────────────────────────────────────────────────
@@ -422,22 +621,70 @@ async def analyze_image(image_path: str) -> dict:
                 )
 
     # ── Signal [3]: Forensic bundle ───────────────────────────────────────────
-    forensic_score, forensic_findings = _forensic_bundle(
+    forensic_score, forensic_findings, forensic_contributions = _forensic_bundle(
         gray, img_array, pil_img, exif
     )
     print(f"[IMAGE v5] forensic_score={forensic_score:.3f}")
 
+    # ── Signal [3.5]: CLIP Semantic Analysis ─────────────────────────────────
+    clip_score = None
+    clip_result = None
+    clip_confidence = 0.0
+    clip_reason = ""
+    
+    if should_use_clip(image_type):
+        print(f"[IMAGE v5] Running CLIP analysis for {image_type}")
+        clip_result = detect_with_clip(img_array, image_type)
+        clip_score = clip_result["ai_probability"]
+        clip_confidence = clip_result["confidence"]
+        clip_reason = clip_result["reason"]
+        print(f"[IMAGE v5] CLIP score={clip_score:.3f}, confidence={clip_confidence:.3f}")
+    else:
+        print(f"[IMAGE v5] CLIP skipped for {image_type}")
+
     # ── Signal [4]: Fusion ────────────────────────────────────────────────────
-    verdict, confidence, ai_probability, deepfake_probability, final_fake_prob = (
-        _fusion_engine(whole_image_score, face_score, forensic_score)
+    verdict, confidence, ai_probability, deepfake_probability, final_fake_prob, contributions = (
+        _fusion_engine(whole_image_score, face_score, forensic_score, forensic_contributions, image_type, recommended_pipeline, clip_score)
     )
     face_log = f"{face_score:.3f}" if face_score is not None else "n/a"
+    clip_log = f"{clip_score:.3f}" if clip_score is not None else "n/a"
     print(
         f"[IMAGE v5] whole={whole_image_score:.3f}  "
         f"face={face_log}  "
         f"forensic={forensic_score:.3f}  "
+        f"clip={clip_log}  "
         f"=> final={final_fake_prob:.3f}  verdict={verdict}  conf={confidence:.2f}"
     )
+
+    # ── Signal [5]: Grad-CAM Visualization (Explainability) ───────────────────
+    # Generate Grad-CAM heatmaps for model interpretability
+    # This helps users understand which regions of the image influenced the prediction
+    heatmap_paths = {'heatmap_path': None, 'overlay_path': None}
+    
+    try:
+        # Only generate Grad-CAM if EfficientNet was used (not document mode)
+        if recommended_pipeline != "document":
+            # Get Grad-CAM generator (singleton for performance)
+            gradcam_gen = _get_gradcam_generator()
+            
+            # Prepare input tensor for Grad-CAM (same transform as model)
+            transform = T.Compose([
+                T.Resize((224, 224)),
+                T.ToTensor(),
+                T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+            ])
+            input_tensor = transform(pil_img).unsqueeze(0)  # (1, 3, 224, 224)
+            
+            # Generate visualization (heatmap and overlay)
+            heatmap_paths = gradcam_gen.generate_visualization(
+                image_path=image_path,
+                input_tensor=input_tensor,
+                output_dir="uploads/heatmaps"
+            )
+            print(f"[IMAGE v5] Grad-CAM generated: {heatmap_paths['heatmap_path']}")
+    except Exception as e:
+        print(f"[IMAGE v5] Grad-CAM generation failed: {e}")
+        # Continue without Grad-CAM if it fails (non-critical for main functionality)
 
     # ── Key findings ──────────────────────────────────────────────────────────
     findings: list[str] = []
@@ -519,6 +766,38 @@ async def analyze_image(image_path: str) -> dict:
 
     # truth_score: legacy field — inverted fake prob on 0–100 scale
     truth_score = round((1.0 - final_fake_prob) * 100, 1)
+    
+    # Generate explanation
+    explanation = _generate_explanation(verdict, final_fake_prob, contributions, findings, clip_reason)
+
+    # ── Signal [6]: PDF Report Generation (Phase 5) ─────────────────────────────
+    # Generate professional PDF report with all analysis results
+    report_path = None
+    try:
+        # Prepare analysis data for report generation
+        report_data = {
+            'verdict': verdict,
+            'confidence': confidence,
+            'ai_probability': ai_probability,
+            'deepfake_probability': deepfake_probability,
+            'image_type': image_type,
+            'module_contributions': contributions,
+            'explanation': explanation,
+            'key_findings': findings,
+            'metadata_summary': metadata_summary,
+            'filename': filename
+        }
+        
+        # Generate PDF report
+        report_path = generate_report(
+            analysis_data=report_data,
+            original_image_path=image_path,
+            output_dir="uploads/reports"
+        )
+        print(f"[IMAGE v5] PDF report generated: {report_path}")
+    except Exception as e:
+        print(f"[IMAGE v5] PDF report generation failed: {e}")
+        # Continue without report if it fails (non-critical for main functionality)
 
     return to_python({
         "verdict":              verdict,
@@ -532,4 +811,21 @@ async def analyze_image(image_path: str) -> dict:
         "ai_detection_score":   ai_probability,
         "result":               verdict,
         "image_type":           image_type,
+        # New fields for Phase 3 - backward compatible additions
+        "module_contributions": contributions,
+        "explanation":          explanation,
+        # New fields for Phase 4 - Grad-CAM visualization (backward compatible)
+        "heatmap_path":         heatmap_paths['heatmap_path'],
+        "overlay_path":         heatmap_paths['overlay_path'],
+        # New fields for Phase 5 - PDF report (backward compatible)
+        "report_path":          report_path,
+        # New fields for Phase 6 - Enhanced Image Type Classification (backward compatible)
+        "image_type_confidence": image_type_confidence,
+        "recommended_pipeline":  recommended_pipeline,
+        "heuristics":           heuristics,
+        # New fields for Phase 7 - CLIP Multi-Model Ensemble (backward compatible)
+        "clip_probability":      clip_score if clip_score is not None else 0.0,
+        "clip_confidence":      clip_confidence,
+        "ensemble_score":       final_fake_prob,
+        "clip_enabled":         clip_score is not None,
     })

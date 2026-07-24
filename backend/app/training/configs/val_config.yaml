@@ -1,0 +1,22 @@
+# TruthLens Validation Configuration
+# ==================================
+# Configuration for validating AI content detection models
+
+# Model Configuration
+model:
+  architecture: efficientnet_b4  # Options: efficientnet_b4, convnext_tiny, resnet50
+  num_classes: 2  # Binary classification (real vs AI)
+
+# Data Configuration
+data:
+  val_metadata: TruthLensDataset/metadata.csv  # Path to validation metadata
+  dataset_dir: TruthLensDataset  # Base directory containing images
+  image_size: 224  # Input image size
+  batch_size: 32  # Batch size for validation
+  num_workers: 4  # Number of data loading workers
+  pin_memory: true  # Pin memory for faster GPU transfer
+
+# Validation Configuration
+validation:
+  checkpoint_path: checkpoints/best_model.pth  # Path to model checkpoint
+  output_path: validation_results.json  # Path to save validation results

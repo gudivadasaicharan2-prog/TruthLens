@@ -1,0 +1,25 @@
+# TruthLens Evaluation Configuration
+# ===================================
+# Configuration for comprehensive model evaluation
+
+# Model Configuration
+model:
+  architecture: efficientnet_b4  # Options: efficientnet_b4, convnext_tiny, resnet50
+  num_classes: 2  # Binary classification (real vs AI)
+
+# Data Configuration
+data:
+  val_metadata: backend/TruthLensDataset/metadata.csv  # Path to validation metadata
+  dataset_dir: backend/TruthLensDataset  # Base directory containing images
+  image_size: 224  # Input image size
+  batch_size: 32  # Batch size for evaluation
+  num_workers: 4  # Number of data loading workers
+  pin_memory: true  # Pin memory for faster GPU transfer
+
+# Evaluation Configuration
+evaluation:
+  checkpoint_path: experiments/experiment_001/checkpoints/best_model.pth  # Path to model checkpoint
+  output_dir: evaluation_results  # Directory to save evaluation results
+  error_analysis: true  # Run error analysis
+  benchmark: true  # Run benchmarking
+  plots: true  # Generate plots

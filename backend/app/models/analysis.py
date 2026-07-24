@@ -15,7 +15,6 @@ class AnalysisResult(str, enum.Enum):
 class MediaType(str, enum.Enum):
     IMAGE = "image"
     VIDEO = "video"
-    AUDIO = "audio"
 
 
 class FactCheckStatus(str, enum.Enum):

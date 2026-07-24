@@ -39,13 +39,6 @@ class VideoAnalysisResponse(BaseModel):
     analysis_id: str
 
 
-class AudioAnalysisResponse(BaseModel):
-    result: str
-    confidence: float
-    issues: List[str]
-    analysis_id: str
-
-
 class FactCheckRequest(BaseModel):
     claim: str
 

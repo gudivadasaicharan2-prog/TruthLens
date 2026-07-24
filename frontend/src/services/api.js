@@ -129,15 +129,6 @@ export const analyzeVideo = async (file) => {
   }
 };
 
-// ── Audio ─────────────────────────────────────────────────────────────────────
-export const analyzeAudio = (file) => {
-  const formData = new FormData();
-  formData.append('file', file);
-  return api.post(`${API_BASE_URL}/api/v1/audio/analyze`, formData, {
-    timeout: 120000,
-  }).then(res => res.data);
-};
-
 // Helper to get current UID
 const getUid = () => {
   try {
@@ -168,10 +159,45 @@ const logBeforeCall = (url) => {
 };
 
 // ── Dashboard ─────────────────────────────────────────────────────────────────
-export const getDashboardStats = () => { const url = `${API_BASE_URL}/api/v1/users/${getUid()}/statistics`; logBeforeCall(url); return api.get(url); };
-export const getDailyStats = () => { const url = `${API_BASE_URL}/api/v1/users/${getUid()}/daily`; logBeforeCall(url); return api.get(url); };
-export const getRecentActivity = () => { const url = `${API_BASE_URL}/api/v1/users/${getUid()}/recent`; logBeforeCall(url); return api.get(url); };
-export const getTopDetections = () => { const url = `${API_BASE_URL}/api/v1/users/${getUid()}/topics`; logBeforeCall(url); return api.get(url); };
+export const getDashboardStats = () => {
+  const uid = getUid();
+  if (!uid || uid === 'unauthorized') {
+    return Promise.reject(new Error('UNAUTHORIZED'));
+  }
+  const url = `${API_BASE_URL}/api/v1/users/${uid}/statistics`;
+  logBeforeCall(url);
+  return api.get(url);
+};
+
+export const getDailyStats = () => {
+  const uid = getUid();
+  if (!uid || uid === 'unauthorized') {
+    return Promise.reject(new Error('UNAUTHORIZED'));
+  }
+  const url = `${API_BASE_URL}/api/v1/users/${uid}/daily`;
+  logBeforeCall(url);
+  return api.get(url);
+};
+
+export const getRecentActivity = () => {
+  const uid = getUid();
+  if (!uid || uid === 'unauthorized') {
+    return Promise.reject(new Error('UNAUTHORIZED'));
+  }
+  const url = `${API_BASE_URL}/api/v1/users/${uid}/recent`;
+  logBeforeCall(url);
+  return api.get(url);
+};
+
+export const getTopDetections = () => {
+  const uid = getUid();
+  if (!uid || uid === 'unauthorized') {
+    return Promise.reject(new Error('UNAUTHORIZED'));
+  }
+  const url = `${API_BASE_URL}/api/v1/users/${uid}/topics`;
+  logBeforeCall(url);
+  return api.get(url);
+};
 
 // ── User / History ────────────────────────────────────────────────────────────
 export const getUserHistory = () => { const url = `${API_BASE_URL}/api/v1/users/${getUid()}/history`; logBeforeCall(url); return api.get(url); };
