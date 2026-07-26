@@ -456,6 +456,15 @@ def train(config: Dict[str, Any]):
                 print(f"[Train] Early stopping triggered at epoch {epoch + 1}")
                 break
     
+    # Reload best checkpoint before exiting
+    best_checkpoint_path = checkpoint_manager.get_best_checkpoint()
+    if best_checkpoint_path:
+        print(f"\n[Train] Reloading best checkpoint from {best_checkpoint_path}")
+        checkpoint_manager.load(model, optimizer, scheduler, str(best_checkpoint_path))
+        print(f"[Train] Best model restored (val accuracy: {best_val_accuracy:.4f})")
+    else:
+        print(f"[Train] Warning: No best checkpoint found to reload")
+    
     # Close TensorBoard writer
     if writer:
         writer.close()
@@ -490,7 +499,6 @@ def train(config: Dict[str, Any]):
     )
     
     # Update checkpoint path in registry
-    best_checkpoint_path = checkpoint_manager.get_best_checkpoint()
     if best_checkpoint_path:
         experiment_manager.update_checkpoint_path(experiment_id, str(best_checkpoint_path))
     

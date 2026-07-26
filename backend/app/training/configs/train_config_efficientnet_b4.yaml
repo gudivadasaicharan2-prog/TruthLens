@@ -1,8 +1,5 @@
-# TruthLens Training Configuration - EfficientNet-B4 Baseline
-# ==========================================================
-# Baseline training configuration for EfficientNet-B4 on CIFAKE
+# TruthLens Training Configuration - EfficientNet-B4
 
-# Experiment Configuration
 experiment:
   base_dir: experiments
   name: cifake_efficientnet_b4_baseline
@@ -11,7 +8,6 @@ experiment:
   save_history: true
   save_plots: true
 
-# Model Configuration
 model:
   architecture: efficientnet_b4
   num_classes: 2
@@ -19,48 +15,46 @@ model:
   dropout: 0.3
   freeze_backbone: false
 
-# Data Configuration
 data:
   train_metadata: TruthLensDataset/metadata.csv
   val_metadata: TruthLensDataset/metadata.csv
   dataset_dir: TruthLensDataset
   image_size: 224
-  batch_size: 32
+
+  # Increase only if your GPU has enough memory
+  batch_size: 48
+
   num_workers: 6
   pin_memory: true
   augment: true
-  balanced_sampling: true
+
+  # Keep disabled because you already removed the sampler
+  balanced_sampling: false
   samples_per_generator: null
 
-# Training Configuration
 training:
-  epochs: 50
+  epochs: 20
+
   seed: 42
   deterministic: false
-  
-  # Optimizer Configuration
+
   optimizer:
     type: adamw
     lr: 0.0001
     weight_decay: 0.01
-  
-  # Learning Rate Scheduler
+
   scheduler:
     type: cosine
-  
-  # Mixed Precision Training
+
   mixed_precision: true
-  
-  # Checkpoint Configuration
+
   save_best_only: true
   max_checkpoints: 3
   resume: false
-  
-  # Early Stopping
+
   early_stopping:
     enabled: true
-    patience: 7
-    min_delta: 0.001
-  
-  # TensorBoard Logging
+    patience: 5
+    min_delta: 0.0005
+
   use_tensorboard: true

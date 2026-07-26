@@ -167,7 +167,7 @@ class CheckpointManager:
         # Remove old checkpoints if exceeding max
         if len(self.checkpoint_history) > self.max_checkpoints:
             old_checkpoint = self.checkpoint_history.pop(0)
-            if old_checkpoint.exists() and old_checkpoint != latest_path:
+            if old_checkpoint.exists() and old_checkpoint != latest_path and old_checkpoint.name != 'best_model.pth':
                 old_checkpoint.unlink()
         
         print(f"[CheckpointManager] Saved checkpoint to {checkpoint_path}")
