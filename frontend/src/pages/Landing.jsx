@@ -65,36 +65,36 @@ const Landing = () => {
   ];
 
   const verdicts = [
-    { label: 'Authentic', color: 'text-green-400', bg: 'bg-green-500/10', border: 'border-green-500/30', icon: '✅' },
-    { label: 'Likely Authentic', color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/30', icon: '✅' },
-    { label: 'Suspicious', color: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/30', icon: '⚠️' },
-    { label: 'AI Generated', color: 'text-orange-400', bg: 'bg-orange-500/10', border: 'border-orange-500/30', icon: '🤖' },
-    { label: 'Deepfake', color: 'text-red-400', bg: 'bg-red-500/10', border: 'border-red-500/30', icon: '❌' },
-    { label: 'Manipulated', color: 'text-rose-400', bg: 'bg-rose-500/10', border: 'border-rose-500/30', icon: '✂️' },
+    { label: 'Authentic', color: 'text-success', bg: 'bg-success/10', border: 'border-success/30', icon: '✅' },
+    { label: 'Likely Authentic', color: 'text-success', bg: 'bg-success/10', border: 'border-success/30', icon: '✅' },
+    { label: 'Suspicious', color: 'text-warning', bg: 'bg-warning/10', border: 'border-warning/30', icon: '⚠️' },
+    { label: 'AI Generated', color: 'text-warning', bg: 'bg-warning/10', border: 'border-warning/30', icon: '🤖' },
+    { label: 'Deepfake', color: 'text-danger', bg: 'bg-danger/10', border: 'border-danger/30', icon: '❌' },
+    { label: 'Manipulated', color: 'text-danger', bg: 'bg-danger/10', border: 'border-danger/30', icon: '✂️' },
   ];
 
   const stats = [
-    { icon: Activity, value: 94, suffix: '.7%', label: 'Detection Accuracy', color: 'text-cyan-400' },
-    { icon: Clock, value: 1, suffix: 's', label: 'Avg. Analysis Time', color: 'text-green-400' },
-    { icon: Globe, value: 50, suffix: 'K+', label: 'Files Analyzed', color: 'text-purple-400' },
-    { icon: Star, value: 99, suffix: '%', label: 'User Satisfaction', color: 'text-yellow-400' },
+    { icon: Activity, value: 94, suffix: '.7%', label: 'Detection Accuracy', color: 'text-accent' },
+    { icon: Clock, value: 1, suffix: 's', label: 'Avg. Analysis Time', color: 'text-success' },
+    { icon: Globe, value: 50, suffix: 'K+', label: 'Files Analyzed', color: 'text-accent' },
+    { icon: Star, value: 99, suffix: '%', label: 'User Satisfaction', color: 'text-warning' },
   ];
 
   const steps = [
     {
       step: '01', icon: Upload, title: 'Upload Your File',
       desc: 'Drag and drop or click to upload any image or video file. Supports all major formats.',
-      color: 'from-cyan-500 to-blue-600',
+      color: 'from-accent to-blue-600',
     },
     {
       step: '02', icon: Brain, title: 'AI Analysis',
       desc: 'Our multi-layer AI forensic engine analyzes every pixel and frame for signs of manipulation.',
-      color: 'from-blue-500 to-purple-600',
+      color: 'from-blue-600 to-purple-600',
     },
     {
       step: '03', icon: Eye, title: 'View Results',
       desc: 'Get a clear verdict with confidence score, key findings, and optional advanced forensic breakdown.',
-      color: 'from-purple-500 to-pink-600',
+      color: 'from-purple-600 to-pink-600',
     },
   ];
 
@@ -105,7 +105,7 @@ const Landing = () => {
   ];
 
   return (
-    <div className="min-h-screen text-white overflow-x-hidden" style={{ background: 'var(--background)' }}>
+    <div className="min-h-screen text-white overflow-x-hidden bg-background">
 
       {/* ── HERO ── */}
       <section ref={heroRef} className="relative min-h-screen flex flex-col items-center justify-center px-4 pt-16 overflow-hidden">
@@ -119,10 +119,10 @@ const Landing = () => {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
-            className="inline-flex items-center gap-2 mb-8 px-4 py-2 glass rounded-full"
+            className="inline-flex items-center gap-2 mb-8 px-4 py-2 bg-glass rounded-full border border-card/50"
           >
-            <span className="w-2 h-2 bg-cyan-400 rounded-full animate-pulse" />
-            <span className="text-cyan-400 text-sm font-medium tracking-wide">AI-Powered Deepfake Detection Platform</span>
+            <span className="w-2 h-2 bg-accent rounded-full animate-pulse" />
+            <span className="text-accent text-sm font-medium tracking-wide">AI-Powered Deepfake Detection Platform</span>
           </motion.div>
 
           {/* Headline */}
@@ -147,7 +147,7 @@ const Landing = () => {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.7, delay: 0.2 }}
-            className="text-lg md:text-xl text-muted-foreground mb-10 max-w-3xl mx-auto leading-relaxed"
+            className="text-lg md:text-xl text-text-secondary mb-10 max-w-3xl mx-auto leading-relaxed"
           >
             Upload any image or video file and instantly determine whether it's real, AI-generated,
             manipulated, or a deepfake — powered by multi-layer forensic AI.
@@ -162,15 +162,15 @@ const Landing = () => {
           >
             <Link
               to="/detect?tab=image"
-              className="group flex items-center gap-2 px-6 py-3 glass rounded-xl font-semibold hover:bg-white/5 transition-all"
+              className="group flex items-center gap-2 px-6 py-3 bg-glass rounded-xl font-semibold hover:bg-card/50 transition-all border border-card/50"
             >
-              <ImageIcon className="w-5 h-5 text-cyan-400" /> Upload Image
+              <ImageIcon className="w-5 h-5 text-accent" /> Upload Image
             </Link>
             <Link
               to="/detect?tab=video"
-              className="group flex items-center gap-2 px-6 py-3 glass rounded-xl font-semibold hover:bg-white/5 transition-all"
+              className="group flex items-center gap-2 px-6 py-3 bg-glass rounded-xl font-semibold hover:bg-card/50 transition-all border border-card/50"
             >
-              <Video className="w-5 h-5 text-purple-400" /> Upload Video
+              <Video className="w-5 h-5 text-accent" /> Upload Video
             </Link>
           </motion.div>
 
@@ -183,16 +183,16 @@ const Landing = () => {
           >
             <button
               onClick={() => navigate('/detect')}
-              className="group px-8 py-4 bg-brand text-white rounded-2xl font-bold text-lg ring-glow transition-all duration-300 flex items-center justify-center gap-2 hover:scale-[1.02] active:scale-[0.98]"
+              className="group px-8 py-4 bg-accent text-white rounded-2xl font-bold text-lg shadow-glow transition-all duration-300 flex items-center justify-center gap-2 hover:scale-[1.02] active:scale-[0.98]"
             >
               Start Detection Free
               <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
             </button>
             <button
               onClick={() => navigate('/register')}
-              className="px-8 py-4 glass-strong text-gray-300 rounded-2xl font-semibold text-lg hover:bg-white/5 transition-all flex items-center justify-center gap-2"
+              className="px-8 py-4 bg-glass-dark text-text-primary rounded-2xl font-semibold text-lg hover:bg-card/50 transition-all flex items-center justify-center gap-2 border border-card/50"
             >
-              <Shield className="w-5 h-5 text-cyan-400" /> Create Free Account
+              <Shield className="w-5 h-5 text-accent" /> Create Free Account
             </button>
           </motion.div>
 
@@ -201,12 +201,12 @@ const Landing = () => {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.6 }}
-            className="flex flex-wrap justify-center gap-6 text-sm text-muted-foreground"
+            className="flex flex-wrap justify-center gap-6 text-sm text-text-secondary"
           >
             {[
-              { icon: CheckCircle, text: 'No signup required to detect', color: 'text-green-500' },
-              { icon: Lock, text: 'Files not stored', color: 'text-cyan-500' },
-              { icon: Zap, text: 'Results in under 10 seconds', color: 'text-yellow-500' },
+              { icon: CheckCircle, text: 'No signup required to detect', color: 'text-success' },
+              { icon: Lock, text: 'Files not stored', color: 'text-accent' },
+              { icon: Zap, text: 'Results in under 10 seconds', color: 'text-warning' },
             ].map(({ icon: Icon, text, color }) => (
               <div key={text} className="flex items-center gap-2">
                 <Icon className={`w-4 h-4 ${color}`} />
@@ -222,7 +222,7 @@ const Landing = () => {
           animate={{ y: [0, 8, 0] }}
           transition={{ repeat: Infinity, duration: 1.5 }}
         >
-          <ChevronDown className="w-6 h-6 text-muted-foreground" />
+          <ChevronDown className="w-6 h-6 text-text-secondary" />
         </motion.div>
       </section>
 
@@ -235,7 +235,7 @@ const Landing = () => {
             viewport={{ once: true }}
             className="text-center mb-12"
           >
-            <p className="text-muted-foreground text-xs uppercase tracking-widest mb-3">Possible Verdicts</p>
+            <p className="text-text-secondary text-xs uppercase tracking-widest mb-3">Possible Verdicts</p>
             <h2 className="text-3xl md:text-4xl font-bold font-display">Every result is clear and actionable</h2>
           </motion.div>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
@@ -265,13 +265,13 @@ const Landing = () => {
             viewport={{ once: true }}
             className="text-center mb-16"
           >
-            <div className="inline-block mb-4 px-4 py-1.5 glass rounded-full">
-              <span className="text-cyan-400 text-sm font-medium">Detection Capabilities</span>
+            <div className="inline-block mb-4 px-4 py-1.5 bg-glass rounded-full border border-card/50">
+              <span className="text-accent text-sm font-medium">Detection Capabilities</span>
             </div>
             <h2 className="text-4xl md:text-5xl font-bold font-display mb-4">
               Two content types.<br />One powerful platform.
             </h2>
-            <p className="text-muted-foreground max-w-2xl mx-auto text-lg">
+            <p className="text-text-secondary max-w-2xl mx-auto text-lg">
               Enterprise-grade AI forensics for images and videos — all in one place.
             </p>
           </motion.div>
@@ -296,13 +296,13 @@ const Landing = () => {
                 </div>
 
                 <h3 className="text-xl font-bold font-display mb-3">{f.title}</h3>
-                <p className="text-muted-foreground text-sm leading-relaxed mb-6">{f.desc}</p>
+                <p className="text-text-secondary text-sm leading-relaxed mb-6">{f.desc}</p>
 
                 <div className={`inline-flex items-center gap-1.5 px-3 py-1 bg-${f.color}-500/10 border border-${f.color}-500/20 rounded-full`}>
                   <span className={`text-${f.color}-400 text-xs font-medium`}>{f.badge}</span>
                 </div>
 
-                <div className="mt-6 flex items-center gap-2 text-muted-foreground group-hover:text-white transition-colors">
+                <div className="mt-6 flex items-center gap-2 text-text-secondary group-hover:text-text-primary transition-colors">
                   <span className="text-sm">Try it now</span>
                   <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                 </div>
@@ -321,8 +321,8 @@ const Landing = () => {
             viewport={{ once: true }}
             className="text-center mb-16"
           >
-            <div className="inline-block mb-4 px-4 py-1.5 glass rounded-full">
-              <span className="text-blue-400 text-sm font-medium">How It Works</span>
+            <div className="inline-block mb-4 px-4 py-1.5 bg-glass rounded-full border border-card/50">
+              <span className="text-accent text-sm font-medium">How It Works</span>
             </div>
             <h2 className="text-4xl md:text-5xl font-bold font-display mb-4">
               Results in 3 simple steps
@@ -331,7 +331,7 @@ const Landing = () => {
 
           <div className="relative">
             {/* Connecting line */}
-            <div className="hidden md:block absolute top-14 left-1/4 right-1/4 h-px bg-gradient-to-r from-cyan-500/50 via-blue-500/50 to-purple-500/50" />
+            <div className="hidden md:block absolute top-14 left-1/4 right-1/4 h-px bg-gradient-to-r from-accent/50 via-blue-600/50 to-purple-600/50" />
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
               {steps.map((s, i) => (
@@ -344,13 +344,13 @@ const Landing = () => {
                   className="relative text-center"
                 >
                   <div className={`w-28 h-28 mx-auto mb-6 rounded-3xl bg-gradient-to-br ${s.color} p-0.5 ring-glow`}>
-                    <div className="w-full h-full rounded-3xl flex flex-col items-center justify-center gap-2" style={{ background: 'var(--background)' }}>
+                    <div className="w-full h-full rounded-3xl flex flex-col items-center justify-center gap-2 bg-background">
                       <s.icon className="w-8 h-8 text-white" />
-                      <span className="text-xs font-bold text-muted-foreground">{s.step}</span>
+                      <span className="text-xs font-bold text-text-secondary">{s.step}</span>
                     </div>
                   </div>
                   <h3 className="text-lg font-bold font-display mb-2">{s.title}</h3>
-                  <p className="text-muted-foreground text-sm leading-relaxed">{s.desc}</p>
+                  <p className="text-text-secondary text-sm leading-relaxed">{s.desc}</p>
                 </motion.div>
               ))}
             </div>
@@ -367,13 +367,13 @@ const Landing = () => {
             viewport={{ once: true }}
             className="text-center mb-16"
           >
-            <div className="inline-block mb-4 px-4 py-1.5 glass rounded-full">
-              <span className="text-violet-400 text-sm font-medium">Powered By</span>
+            <div className="inline-block mb-4 px-4 py-1.5 bg-glass rounded-full border border-card/50">
+              <span className="text-accent text-sm font-medium">Powered By</span>
             </div>
             <h2 className="text-4xl md:text-5xl font-bold font-display mb-4">
               Cutting-edge AI technology
             </h2>
-            <p className="text-muted-foreground max-w-2xl mx-auto text-lg">
+            <p className="text-text-secondary max-w-2xl mx-auto text-lg">
               Built on state-of-the-art machine learning models for maximum accuracy
             </p>
           </motion.div>
@@ -388,11 +388,11 @@ const Landing = () => {
                 transition={{ delay: i * 0.15 }}
                 className="glass-card p-6 text-center"
               >
-                <div className="w-12 h-12 mx-auto mb-4 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center ring-glow">
+                <div className="w-12 h-12 mx-auto mb-4 rounded-xl bg-gradient-to-br from-accent to-purple-600 flex items-center justify-center shadow-glow">
                   <tech.icon className="w-6 h-6 text-white" />
                 </div>
                 <h3 className="text-lg font-bold font-display mb-2">{tech.title}</h3>
-                <p className="text-muted-foreground text-sm">{tech.desc}</p>
+                <p className="text-text-secondary text-sm">{tech.desc}</p>
               </motion.div>
             ))}
           </div>
@@ -408,8 +408,8 @@ const Landing = () => {
             viewport={{ once: true }}
             className="text-center mb-16"
           >
-            <div className="inline-block mb-4 px-4 py-1.5 glass rounded-full">
-              <span className="text-purple-400 text-sm font-medium">Platform Statistics</span>
+            <div className="inline-block mb-4 px-4 py-1.5 bg-glass rounded-full border border-card/50">
+              <span className="text-accent text-sm font-medium">Platform Statistics</span>
             </div>
             <h2 className="text-4xl md:text-5xl font-bold font-display">
               Trusted results, proven accuracy
@@ -430,7 +430,7 @@ const Landing = () => {
                 <div className={`text-3xl md:text-4xl font-bold font-display ${s.color} mb-1`}>
                   <Counter target={s.value} suffix={s.suffix} />
                 </div>
-                <p className="text-muted-foreground text-sm">{s.label}</p>
+                <p className="text-text-secondary text-sm">{s.label}</p>
               </motion.div>
             ))}
           </div>
@@ -454,20 +454,20 @@ const Landing = () => {
                 right now
               </span>
             </h2>
-            <p className="text-muted-foreground text-lg mb-10">
+            <p className="text-text-secondary text-lg mb-10">
               No signup required. Upload a file and get your authenticity verdict in seconds.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <button
                 onClick={() => navigate('/detect')}
-                className="group px-8 py-4 bg-brand text-white rounded-2xl font-bold text-lg ring-glow transition-all duration-300 flex items-center justify-center gap-2 hover:scale-[1.02] active:scale-[0.98]"
+                className="group px-8 py-4 bg-accent text-white rounded-2xl font-bold text-lg shadow-glow transition-all duration-300 flex items-center justify-center gap-2 hover:scale-[1.02] active:scale-[0.98]"
               >
                 Analyze Content Now
                 <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
               </button>
               <button
                 onClick={() => navigate('/register')}
-                className="px-8 py-4 glass-strong text-gray-300 rounded-2xl font-semibold text-lg hover:bg-white/5 transition-all"
+                className="px-8 py-4 bg-glass-dark text-text-primary rounded-2xl font-semibold text-lg hover:bg-card/50 transition-all border border-card/50"
               >
                 Create Free Account
               </button>
@@ -477,20 +477,20 @@ const Landing = () => {
       </section>
 
       {/* ── FOOTER ── */}
-      <footer className="py-12 px-4 border-t border-white/5">
+      <footer className="py-12 px-4 border-t border-card/50">
         <div className="max-w-7xl mx-auto">
           <div className="flex flex-col md:flex-row justify-between items-center gap-6">
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-gradient-to-br from-cyan-400 to-blue-600 rounded-lg flex items-center justify-center ring-glow">
+              <div className="w-8 h-8 bg-gradient-to-br from-accent to-blue-600 rounded-lg flex items-center justify-center shadow-glow">
                 <Shield className="w-4 h-4 text-white" />
               </div>
-              <span className="text-white font-bold text-xl font-display">TruthLens</span>
-              <span className="ml-2 text-muted-foreground text-sm">AI Image & Video Authenticity Platform</span>
+              <span className="text-text-primary font-bold text-xl font-display">TruthLens</span>
+              <span className="ml-2 text-text-secondary text-sm">AI Image & Video Authenticity Platform</span>
             </div>
-            <p className="text-muted-foreground text-sm">© 2026 TruthLens. All rights reserved.</p>
+            <p className="text-text-secondary text-sm">© 2026 TruthLens. All rights reserved.</p>
             <div className="flex gap-6">
               {['Privacy', 'Terms', 'Contact'].map(link => (
-                <a key={link} href="#" className="text-muted-foreground hover:text-cyan-400 transition-colors text-sm">{link}</a>
+                <a key={link} href="#" className="text-text-secondary hover:text-accent transition-colors text-sm">{link}</a>
               ))}
             </div>
           </div>

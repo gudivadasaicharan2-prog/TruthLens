@@ -1,0 +1,85 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: truthlens-postgres
+    environment:
+      POSTGRES_DB: truthlens
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - truthlens-network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: truthlens-backend
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/truthlens
+      SECRET_KEY: ${SECRET_KEY}
+      JWT_SECRET: ${JWT_SECRET}
+      API_KEY: ${API_KEY}
+      CORS_ORIGINS: ${CORS_ORIGINS:-https://truthlens.app}
+      MAX_FILE_SIZE: ${MAX_FILE_SIZE:-10485760}
+      ALLOWED_MIME_TYPES: ${ALLOWED_MIME_TYPES:-image/jpeg,image/png,image/webp}
+      UPLOAD_DIR: ./uploads
+      MODEL_PATH: ./models
+    volumes:
+      - ./backend/uploads:/app/uploads
+      - ./backend/models:/app/models
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - truthlens-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: truthlens-frontend
+    environment:
+      VITE_API_URL: ${VITE_API_URL:-https://api.truthlens.app}
+      VITE_ENABLE_ANALYTICS: ${VITE_ENABLE_ANALYTICS:-false}
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    restart: unless-stopped
+    networks:
+      - truthlens-network
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  truthlens-network:
+    driver: bridge

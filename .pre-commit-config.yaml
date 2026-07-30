@@ -1,0 +1,53 @@
+# Pre-commit hooks configuration
+# See https://pre-commit.com for more information
+
+repos:
+  # Python hooks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.4.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+        args: ['--maxkb=1000']
+      - id: check-json
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: debug-statements
+
+  - repo: https://github.com/psf/black
+    rev: 23.7.0
+    hooks:
+      - id: black
+        language_version: python3.11
+
+  - repo: https://github.com/pycqa/isort
+    rev: 5.12.0
+    hooks:
+      - id: isort
+        args: ["--profile", "black"]
+
+  - repo: https://github.com/PyCQA/flake8
+    rev: 6.1.0
+    hooks:
+      - id: flake8
+        args: ['--max-line-length=100', '--extend-ignore=E203']
+
+  # JavaScript/TypeScript hooks
+  - repo: https://github.com/pre-commit/mirrors-eslint
+    rev: v8.45.0
+    hooks:
+      - id: eslint
+        files: \.(js|jsx|ts|tsx)$
+        additional_dependencies:
+          - eslint@8.45.0
+          - eslint-config-react-app@7.0.1
+
+  # General hooks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.4.0
+    hooks:
+      - id: detect-private-key
+      - id: check-case-conflict
+      - id: check-symlinks

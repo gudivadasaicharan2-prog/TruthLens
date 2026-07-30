@@ -22,3 +22,5 @@ numpy
 psycopg2-binary
 # RetinaFace-class face detector (installed with --no-deps; torch/numpy/Pillow already present)
 facenet-pytorch==2.5.3
+# Security and rate limiting
+slowapi==0.1.9

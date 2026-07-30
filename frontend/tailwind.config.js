@@ -7,6 +7,22 @@ export default {
   theme: {
     extend: {
       colors: {
+        // Primary theme colors
+        background: '#0B1220',
+        card: '#111827',
+        accent: '#3B82F6',
+        success: '#22C55E',
+        warning: '#F59E0B',
+        danger: '#EF4444',
+        
+        // Text colors
+        text: {
+          primary: '#FFFFFF',
+          secondary: '#9CA3AF',
+          muted: '#6B7280',
+        },
+        
+        // Legacy colors for compatibility
         navy: {
           900: '#0B1120',
           800: '#151E32',
@@ -16,20 +32,35 @@ export default {
           400: '#00D4FF',
           500: '#00B8E6',
         },
-        danger: '#FF4757',
-        success: '#2ED573',
-        warning: '#FFA502',
-        text: {
-          primary: '#F0F4FF',
-          secondary: '#A0AEC0',
-        }
+      },
+      borderRadius: {
+        'xl': '16px',
+        '2xl': '20px',
+        '3xl': '24px',
       },
       fontFamily: {
-        heading: ['Space Grotesk', 'sans-serif'],
-        body: ['DM Sans', 'sans-serif'],
+        heading: ['Inter', 'system-ui', 'sans-serif'],
+        body: ['Inter', 'system-ui', 'sans-serif'],
       },
       backgroundImage: {
-        'hex-pattern': "url('data:image/svg+xml,%3Csvg width=\"60\" height=\"60\" viewBox=\"0 0 60 60\" xmlns=\"http://www.w3.org/2000/svg\"%3E%3Cpath d=\"M30 0l30 17.32v34.64L30 60 0 51.96V17.32z\" fill=\"none\" stroke=\"%2300D4FF\" stroke-opacity=\"0.05\"/%3E%3C/svg%3E')",
+        'glass': 'linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.05) 100%)',
+        'glass-dark': 'linear-gradient(135deg, rgba(17, 24, 39, 0.8) 0%, rgba(17, 24, 39, 0.6) 100%)',
+      },
+      boxShadow: {
+        'glass': '0 8px 32px 0 rgba(0, 0, 0, 0.37)',
+        'glow': '0 0 20px rgba(59, 130, 246, 0.3)',
+        'glow-success': '0 0 20px rgba(34, 197, 94, 0.3)',
+        'glow-danger': '0 0 20px rgba(239, 68, 68, 0.3)',
+      },
+      animation: {
+        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+        'float': 'float 3s ease-in-out infinite',
+      },
+      keyframes: {
+        float: {
+          '0%, 100%': { transform: 'translateY(0px)' },
+          '50%': { transform: 'translateY(-10px)' },
+        },
       },
     },
   },

@@ -828,4 +828,11 @@ async def analyze_image(image_path: str) -> dict:
         "clip_confidence":      clip_confidence,
         "ensemble_score":       final_fake_prob,
         "clip_enabled":         clip_score is not None,
+        # New fields for v2.2 - backward compatible additions (optional fields)
+        "patch_statistics":      None,  # Will be populated when patch inference is enabled
+        "ood_score":            None,  # Will be populated when OOD detection is enabled
+        "frequency_features":    None,  # Will be populated when enhanced frequency analysis is enabled
+        "noise_features":       None,  # Will be populated when enhanced noise analysis is enabled
+        "fusion_weights_used":  contributions,  # Already available in module_contributions
+        "confidence_calibrated": confidence,  # Already calibrated, exposed for transparency
     })

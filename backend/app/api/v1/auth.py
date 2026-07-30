@@ -1,31 +1,67 @@
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from fastapi import APIRouter, HTTPException, Request
+from pydantic import BaseModel, Field, validator
 from typing import Optional
 from app.core.security import create_access_token, get_password_hash
+from app.core.rate_limit import limiter
+from app.core.audit_logger import audit_logger
 import uuid, hashlib, os
 from datetime import datetime
+import re
 
 router = APIRouter()
 
 
 class RegisterRequest(BaseModel):
-    name: str
-    email: str
-    password: str
-    role: Optional[str] = "general"
+    name: str = Field(..., min_length=1, max_length=100, description="User name")
+    email: str = Field(..., min_length=5, max_length=255, description="User email address")
+    password: str = Field(..., min_length=8, max_length=128, description="User password")
+    role: Optional[str] = Field("general", description="User role")
+    
+    @validator('name')
+    def validate_name(cls, v):
+        if not v or not v.strip():
+            raise ValueError('Name cannot be empty')
+        if len(v.strip()) < 2:
+            raise ValueError('Name must be at least 2 characters')
+        if not re.match(r'^[a-zA-Z\s\-\'\.]+$', v):
+            raise ValueError('Name contains invalid characters')
+        return v.strip()
+    
+    @validator('email')
+    def validate_email(cls, v):
+        if not re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', v):
+            raise ValueError('Invalid email format')
+        return v.lower()
+    
+    @validator('password')
+    def validate_password(cls, v):
+        if not any(c.isupper() for c in v):
+            raise ValueError('Password must contain at least one uppercase letter')
+        if not any(c.islower() for c in v):
+            raise ValueError('Password must contain at least one lowercase letter')
+        if not any(c.isdigit() for c in v):
+            raise ValueError('Password must contain at least one digit')
+        return v
 
 
 class LoginRequest(BaseModel):
-    email: str
-    password: str
+    email: str = Field(..., min_length=5, max_length=255, description="User email address")
+    password: str = Field(..., min_length=1, max_length=128, description="User password")
+    
+    @validator('email')
+    def validate_email(cls, v):
+        if not re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', v):
+            raise ValueError('Invalid email format')
+        return v.lower()
 
 
 class GoogleAuthRequest(BaseModel):
-    token: str
+    token: str = Field(..., min_length=10, max_length=5000, description="Google OAuth token")
 
 
 @router.post("/register")
-async def register(data: RegisterRequest):
+@limiter.limit("10/minute")
+async def register(request: Request, data: RegisterRequest):
     try:
         user_id = str(uuid.uuid4())
         user = {
@@ -38,14 +74,21 @@ async def register(data: RegisterRequest):
         }
         # Create JWT with email as 'sub' so backend can identify user
         token = create_access_token({"sub": data.email, "user_id": user_id, "name": data.name})
+        
+        # Log successful registration
+        audit_logger.log_auth_success(data.email, "email", request.client.host if request.client else None)
+        
         return {"message": "Registration successful", "access_token": token, "token_type": "bearer", "user": user}
     except Exception as e:
+        audit_logger.log_auth_failure(data.email, "email", str(e), request.client.host if request.client else None)
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/login")
-async def login(data: LoginRequest):
+@limiter.limit("10/minute")
+async def login(request: Request, data: LoginRequest):
     if not data.email or not data.password:
+        audit_logger.log_auth_failure(data.email, "email", "Missing credentials", request.client.host if request.client else None)
         raise HTTPException(status_code=400, detail="Email and password required")
 
     # Generate a stable user_id from email (deterministic for mock auth)
@@ -60,6 +103,10 @@ async def login(data: LoginRequest):
     }
     # Real JWT with email in 'sub' claim
     token = create_access_token({"sub": data.email, "user_id": user_id, "name": user["name"]})
+    
+    # Log successful login
+    audit_logger.log_auth_success(data.email, "email", request.client.host if request.client else None)
+    
     return {"access_token": token, "token_type": "bearer", "user": user}
 
 
@@ -69,7 +116,8 @@ async def get_me():
 
 
 @router.post("/google")
-async def google_login(data: GoogleAuthRequest):
+@limiter.limit("10/minute")
+async def google_login(request: Request, data: GoogleAuthRequest):
     """
     Verify Google ID token and return a proper JWT.
     Falls back to decoding the credential client-side if google-auth library unavailable.
@@ -113,6 +161,7 @@ async def google_login(data: GoogleAuthRequest):
             print(f"[AUTH] JWT decode fallback failed: {e2}")
 
     if not email:
+        audit_logger.log_auth_failure(None, "google", "Could not extract user info from token", request.client.host if request.client else None)
         raise HTTPException(status_code=401, detail="Could not extract user info from Google token")
 
     user_id = str(uuid.uuid5(uuid.NAMESPACE_URL, email))  # Stable ID from email
@@ -137,5 +186,8 @@ async def google_login(data: GoogleAuthRequest):
         "picture": picture or "",
         "provider": "google",
     })
+    
+    # Log successful Google login
+    audit_logger.log_auth_success(email, "google", request.client.host if request.client else None)
 
     return {"access_token": token, "token_type": "bearer", "user": user}

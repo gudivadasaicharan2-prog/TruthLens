@@ -1,0 +1,36 @@
+{
+  "datasets": [
+    {
+      "name": "GenImage",
+      "type": "ai",
+      "status": "pending",
+      "downloaded": false,
+      "num_images": 0,
+      "description": "AI-generated images from various generative models"
+    },
+    {
+      "name": "DiffusionDB",
+      "type": "ai",
+      "status": "pending",
+      "downloaded": false,
+      "num_images": 0,
+      "description": "AI-generated images from diffusion models (Stable Diffusion, DALL-E, etc.)"
+    },
+    {
+      "name": "COCO",
+      "type": "real",
+      "status": "pending",
+      "downloaded": false,
+      "num_images": 0,
+      "description": "Real photographs from the COCO dataset"
+    },
+    {
+      "name": "RAISE",
+      "type": "real",
+      "status": "pending",
+      "downloaded": false,
+      "num_images": 0,
+      "description": "High-quality real photographs from the RAISE dataset"
+    }
+  ]
+}

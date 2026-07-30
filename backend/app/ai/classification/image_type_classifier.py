@@ -80,13 +80,38 @@ def _calculate_texture_entropy(gray: np.ndarray) -> float:
 
 def _detect_compression_artifacts(img_array: np.ndarray) -> float:
     """Detect JPEG compression artifacts using blockiness detection."""
-    gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
+    try:
+        gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
+    except:
+        gray = cv2.cvtColor(img_array, cv2.COLOR_BGR2GRAY)
     
     # Detect horizontal block boundaries (8x8 blocks)
-    h_diff = np.abs(gray[:, 8::8] - gray[:, 7::8])
-    v_diff = np.abs(gray[8::8, :] - gray[7::8, :])
+    # Handle images where width/height is not divisible by 8
+    h_diff = np.array([])
+    v_diff = np.array([])
     
-    blockiness = float(np.mean(h_diff) + np.mean(v_diff))
+    try:
+        h_start = gray[:, 8::8]
+        h_end = gray[:, 7::8]
+        min_h_width = min(h_start.shape[1], h_end.shape[1])
+        h_diff = np.abs(h_start[:, :min_h_width] - h_end[:, :min_h_width])
+    except:
+        pass
+    
+    try:
+        v_start = gray[8::8, :]
+        v_end = gray[7::8, :]
+        min_v_height = min(v_start.shape[0], v_end.shape[0])
+        v_diff = np.abs(v_start[:min_v_height, :] - v_end[:min_v_height, :])
+    except:
+        pass
+    
+    blockiness = 0.0
+    if h_diff.size > 0:
+        blockiness += float(np.mean(h_diff))
+    if v_diff.size > 0:
+        blockiness += float(np.mean(v_diff))
+    
     return blockiness
 
 

@@ -44,9 +44,9 @@ try:
     from reportlab.pdfbase import pdfmetrics
     from reportlab.pdfbase.ttfonts import TTFont
     REPORTLAB_AVAILABLE = True
-except ImportError:
+except Exception as e:
     REPORTLAB_AVAILABLE = False
-    print("[Report Generator] ReportLab not installed. Install with: pip install reportlab")
+    print(f"[Report Generator] ReportLab import failed: {e}")
 
 
 class ReportGenerator:
@@ -85,6 +85,9 @@ class ReportGenerator:
         Returns:
             Dictionary of ParagraphStyle objects
         """
+        if not REPORTLAB_AVAILABLE:
+            return {}
+        
         styles = getSampleStyleSheet()
         
         # Custom styles with unique names to avoid conflicts
@@ -164,7 +167,7 @@ class ReportGenerator:
         else:
             return "LOW"
     
-    def _get_verdict_color(self, verdict: str) -> colors.Color:
+    def _get_verdict_color(self, verdict: str):
         """
         Get color for verdict display.
         
@@ -174,6 +177,9 @@ class ReportGenerator:
         Returns:
             Color object for the verdict
         """
+        if not REPORTLAB_AVAILABLE:
+            return None
+        
         verdict_lower = verdict.lower()
         if 'deepfake' in verdict_lower or 'ai generated' in verdict_lower:
             return colors.HexColor('#dc3545')  # Red
@@ -202,6 +208,9 @@ class ReportGenerator:
             story: List of flowables to add to
             analysis_data: Complete analysis output from image_detector.py
         """
+        if not REPORTLAB_AVAILABLE:
+            return
+        
         story.append(Paragraph("Analysis Summary", self.styles['TruthLensSectionTitle']))
         
         # Extract filename from image path if available
@@ -243,6 +252,9 @@ class ReportGenerator:
             story: List of flowables to add to
             analysis_data: Complete analysis output from image_detector.py
         """
+        if not REPORTLAB_AVAILABLE:
+            return
+        
         verdict = analysis_data.get('verdict', 'Unknown')
         confidence = analysis_data.get('confidence', 0.0)
         ai_probability = analysis_data.get('ai_probability', 0.0)
@@ -286,6 +298,9 @@ class ReportGenerator:
             story: List of flowables to add to
             analysis_data: Complete analysis output from image_detector.py
         """
+        if not REPORTLAB_AVAILABLE:
+            return
+        
         contributions = analysis_data.get('module_contributions', {})
         
         if not contributions:
@@ -339,6 +354,9 @@ class ReportGenerator:
             story: List of flowables to add to
             analysis_data: Complete analysis output from image_detector.py
         """
+        if not REPORTLAB_AVAILABLE:
+            return
+        
         explanation = analysis_data.get('explanation', {})
         
         if not explanation:
@@ -376,6 +394,9 @@ class ReportGenerator:
             caption: Caption for the image
             max_width: Maximum width for the image
         """
+        if not REPORTLAB_AVAILABLE:
+            return
+        
         if not image_path or not Path(image_path).exists():
             story.append(Paragraph(f"{caption} - Image not available", self.styles['TruthLensBodyText']))
             story.append(Spacer(1, 0.1 * inch))
@@ -412,6 +433,9 @@ class ReportGenerator:
             analysis_data: Complete analysis output from image_detector.py
             original_image_path: Path to the original analyzed image
         """
+        if not REPORTLAB_AVAILABLE:
+            return
+        
         story.append(Paragraph("Image Visualizations", self.styles['TruthLensSectionTitle']))
         
         # Original image
@@ -437,6 +461,9 @@ class ReportGenerator:
             story: List of flowables to add to
             analysis_data: Complete analysis output from image_detector.py
         """
+        if not REPORTLAB_AVAILABLE:
+            return
+        
         story.append(Paragraph("Technical Details", self.styles['TruthLensSectionTitle']))
         
         # Processing time (if available)
@@ -470,6 +497,9 @@ class ReportGenerator:
             canvas: ReportLab canvas object
             doc: Document template
         """
+        if not REPORTLAB_AVAILABLE:
+            return
+        
         canvas.saveState()
         
         # Footer text

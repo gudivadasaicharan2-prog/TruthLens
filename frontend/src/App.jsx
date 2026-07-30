@@ -1,5 +1,5 @@
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import { useState, lazy, Suspense } from 'react';
+import { useState, lazy, Suspense, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -7,16 +7,21 @@ import Background from './components/Background';
 import Navbar from './components/Navbar';
 import Sidebar from './components/Sidebar';
 
-// Lazy load pages for better performance
-const Landing = lazy(() => import('./pages/Landing'));
-const Login = lazy(() => import('./pages/Login'));
-const Register = lazy(() => import('./pages/Register'));
-const Detect = lazy(() => import('./pages/Detect'));
-const Dashboard = lazy(() => import('./pages/Dashboard'));
-const Profile = lazy(() => import('./pages/Profile'));
-const History = lazy(() => import('./pages/History'));
-const Results = lazy(() => import('./pages/Results'));
-const NotFound = lazy(() => import('./pages/NotFound'));
+// Lazy load pages for better performance with webpack chunk names
+const Landing = lazy(() => import(/* webpackChunkName: "landing" */ './pages/Landing'));
+const Login = lazy(() => import(/* webpackChunkName: "auth" */ './pages/Login'));
+const Register = lazy(() => import(/* webpackChunkName: "auth" */ './pages/Register'));
+const Detect = lazy(() => import(/* webpackChunkName: "detect" */ './pages/Detect'));
+const Dashboard = lazy(() => import(/* webpackChunkName: "dashboard" */ './pages/Dashboard'));
+const Profile = lazy(() => import(/* webpackChunkName: "profile" */ './pages/Profile'));
+const History = lazy(() => import(/* webpackChunkName: "history" */ './pages/History'));
+const Results = lazy(() => import(/* webpackChunkName: "results" */ './pages/Results'));
+const NotFound = lazy(() => import(/* webpackChunkName: "notfound" */ './pages/NotFound'));
+const AnalysisProgress = lazy(() => import(/* webpackChunkName: "analysis" */ './pages/AnalysisProgress'));
+const AdvancedResults = lazy(() => import(/* webpackChunkName: "results" */ './pages/AdvancedResults'));
+const SystemHealth = lazy(() => import(/* webpackChunkName: "system" */ './pages/SystemHealth'));
+const CompareMode = lazy(() => import(/* webpackChunkName: "compare" */ './pages/CompareMode'));
+const BatchMode = lazy(() => import(/* webpackChunkName: "batch" */ './pages/BatchMode'));
 
 const ProtectedRoute = ({ children }) => {
   const { user, loading } = useAuth();
