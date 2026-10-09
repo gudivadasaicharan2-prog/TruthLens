@@ -83,7 +83,6 @@ const ResultCard = ({ result, onReset, imagePreview }) => {
   const explanation = result.explanation || {};
   const heatmapPath = result.heatmap_path;
   const overlayPath = result.overlay_path;
-  const reportPath = result.report_path;
 
   const metaSummary = result.metadata_summary || null;
   const cfg = VERDICT_CONFIG[verdict] || {
@@ -346,22 +345,6 @@ const ResultCard = ({ result, onReset, imagePreview }) => {
               );
             })}
           </div>
-        </div>
-      )}
-
-      {/* ── Report Download ── */}
-      {reportPath && (
-        <div className="glass-card p-6 rounded-3xl">
-          <h3 className="text-white text-sm font-semibold uppercase tracking-wider mb-4 flex items-center gap-2">
-            <FileIcon className="w-4 h-4 text-cyan-400" /> Analysis Report
-          </h3>
-          <a
-            href={getApiUrl(reportPath)}
-            download
-            className="inline-flex items-center gap-2 px-6 py-3 bg-brand text-white rounded-2xl font-semibold ring-glow transition-all hover:scale-[1.02] active:scale-[0.98]"
-          >
-            <Download className="w-4 h-4" /> Download PDF Report
-          </a>
         </div>
       )}
 

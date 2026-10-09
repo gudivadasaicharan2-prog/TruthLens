@@ -21,12 +21,15 @@ class FusionConfig:
         'ood': 0.00
     }
     
-    # Artwork pipeline (frequency + texture + CLIP + noise) - v2.2 adaptive
+    # Artwork pipeline (frequency + texture + OpenCLIP + diffusion) - v3.0 enhanced
+    # OpenCLIP weight increased to 45% for AI artwork detection
     ARTWORK_PIPELINE = {
-        'whole_image': 0.00,
+        'whole_image': 0.20,  # Classifier weight
         'face': 0.00,
-        'forensic': 1.00,
-        'clip': 0.00,
+        'forensic': 0.25,  # Forensic weight
+        'clip': 0.00,  # Old CLIP replaced by OpenCLIP
+        'openclip': 0.45,  # OpenCLIP for semantic AI artwork detection
+        'diffusion': 0.10,  # Diffusion fingerprint
         'patch': 0.00,
         'ood': 0.00
     }

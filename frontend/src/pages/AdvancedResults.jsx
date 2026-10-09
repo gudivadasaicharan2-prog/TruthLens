@@ -392,14 +392,6 @@ const AdvancedResults = () => {
               whileTap={{ scale: 0.98 }}
               className="flex flex-col items-center gap-2 p-4 bg-glass rounded-xl border border-card/50 hover:border-accent/50 transition-all"
             >
-              <FileText className="w-5 h-5 text-accent" />
-              <span className="text-xs text-text-secondary">PDF Report</span>
-            </motion.button>
-            <motion.button
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              className="flex flex-col items-center gap-2 p-4 bg-glass rounded-xl border border-card/50 hover:border-accent/50 transition-all"
-            >
               <ImageIcon className="w-5 h-5 text-accent" />
               <span className="text-xs text-text-secondary">Heatmap</span>
             </motion.button>

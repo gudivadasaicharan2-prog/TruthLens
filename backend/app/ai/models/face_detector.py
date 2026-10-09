@@ -25,16 +25,21 @@ def _get_detector():
     """Lazy-load MTCNN singleton. Uses CUDA GPU if available, else CPU."""
     global _MTCNN, _DEVICE
     if _MTCNN is None:
-        from facenet_pytorch import MTCNN
-        _DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        _MTCNN = MTCNN(
-            keep_all=True,
-            device=_DEVICE,
-            min_face_size=20,
-            thresholds=[0.6, 0.7, 0.7],
-            post_process=False,
-        )
-        print(f"[FACE_DETECTOR] MTCNN (RetinaFace-class) loaded on device: {_DEVICE}")
+        try:
+            from facenet_pytorch import MTCNN
+            _DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            _MTCNN = MTCNN(
+                keep_all=True,
+                device=_DEVICE,
+                min_face_size=20,
+                thresholds=[0.6, 0.7, 0.7],
+                post_process=False,
+            )
+            print(f"[FACE_DETECTOR] MTCNN (RetinaFace-class) loaded on device: {_DEVICE}")
+        except Exception as e:
+            print(f"[FACE_DETECTOR] ERROR: Failed to initialize MTCNN: {e}")
+            print(f"[FACE_DETECTOR] Face detection will be skipped. Analysis will continue with whole-image and forensic methods.")
+            _MTCNN = None
     return _MTCNN
 
 
@@ -90,6 +95,10 @@ def detect_faces_with_boxes(
     """
     try:
         detector = _get_detector()
+        if detector is None:
+            print(f"[FACE_DETECTOR] MTCNN not available. Skipping face detection.")
+            return 0, None, None
+        
         pil_img = Image.fromarray(img_rgb.astype(np.uint8))
         boxes, probs = detector.detect(pil_img)
 

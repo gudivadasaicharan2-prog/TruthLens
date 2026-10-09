@@ -265,31 +265,6 @@ const Settings = ({ isOpen, onClose }) => {
                       </p>
                     </div>
                   </div>
-
-                  {/* Auto Download Reports */}
-                  <div className="p-4 bg-glass rounded-xl border border-card/50">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <Download className="w-5 h-5 text-accent" />
-                        <div>
-                          <h3 className="font-semibold text-text-primary">Auto Download Reports</h3>
-                          <p className="text-text-secondary text-sm">Automatically download PDF reports after analysis</p>
-                        </div>
-                      </div>
-                      <motion.button
-                        whileHover={{ scale: 1.1 }}
-                        whileTap={{ scale: 0.9 }}
-                        onClick={() => handleSettingChange('autoDownloadReports', !settings.autoDownloadReports)}
-                        className="p-2"
-                      >
-                        {settings.autoDownloadReports ? (
-                          <ToggleRight className="w-6 h-6 text-accent" />
-                        ) : (
-                          <ToggleLeft className="w-6 h-6 text-text-muted" />
-                        )}
-                      </motion.button>
-                    </div>
-                  </div>
                 </motion.div>
               )}
 

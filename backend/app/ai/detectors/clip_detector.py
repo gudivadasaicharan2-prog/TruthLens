@@ -90,6 +90,45 @@ REAL_PROMPTS = [
     "genuine visual"
 ]
 
+# v2.3: Additional semantic prompts for fine-grained analysis
+SEMANTIC_PROMPTS = {
+    "real_photograph": [
+        "real photograph",
+        "authentic camera image",
+        "natural photograph",
+        "genuine photo",
+        "real world image"
+    ],
+    "ai_generated": [
+        "AI generated image",
+        "artificial intelligence artwork",
+        "computer generated illustration",
+        "synthetic image",
+        "diffusion model output"
+    ],
+    "digital_artwork": [
+        "digital artwork",
+        "illustration",
+        "digital painting",
+        "concept art",
+        "graphic design"
+    ],
+    "anime": [
+        "anime style",
+        "manga art",
+        "Japanese animation",
+        "cartoon style",
+        "stylized character"
+    ],
+    "synthetic_image": [
+        "synthetic image",
+        "computer generated visual",
+        "artificial scene",
+        "virtual image",
+        "digital rendering"
+    ]
+}
+
 ARTWORK_PROMPTS = [
     "digital artwork",
     "illustration",
@@ -135,6 +174,75 @@ def _calculate_clip_probability(
     return ai_prob
 
 
+def _calculate_semantic_scores(
+    image_features: torch.Tensor,
+    text_tokens: torch.Tensor,
+    device: str,
+    model
+) -> Tuple[float, float]:
+    """
+    v2.3: Calculate semantic similarity scores against specific categories.
+    
+    Uses cosine similarity to compute how well the image matches
+    "real photograph" vs "AI generated" prompts separately.
+    
+    Args:
+        image_features: Normalized image features from CLIP
+        text_tokens: Tokenized text prompts
+        device: Device for computation
+        model: CLIP model instance
+        
+    Returns:
+        Tuple of (clip_real_score, clip_ai_score) as floats [0, 1]
+    """
+    try:
+        import open_clip
+        
+        # Flatten all semantic prompts
+        all_prompts = []
+        prompt_categories = []
+        
+        for category, prompts in SEMANTIC_PROMPTS.items():
+            all_prompts.extend(prompts)
+            prompt_categories.extend([category] * len(prompts))
+        
+        # Tokenize semantic prompts
+        semantic_tokens = open_clip.tokenize(all_prompts).to(device)
+        
+        # Encode semantic text
+        with torch.no_grad():
+            semantic_features = model.encode_text(semantic_tokens)
+            semantic_features = semantic_features / semantic_features.norm(dim=-1, keepdim=True)
+        
+        # Calculate cosine similarity
+        semantic_similarity = (image_features @ semantic_features.T).softmax(dim=-1)
+        semantic_scores = semantic_similarity[0].cpu().numpy()
+        
+        # Aggregate scores by category
+        category_scores = {}
+        current_idx = 0
+        
+        for category, prompts in SEMANTIC_PROMPTS.items():
+            category_scores[category] = semantic_scores[current_idx:current_idx + len(prompts)].mean()
+            current_idx += len(prompts)
+        
+        # Calculate real vs AI scores
+        real_score = category_scores.get("real_photograph", 0.5)
+        ai_score = category_scores.get("ai_generated", 0.5)
+        
+        # Normalize
+        total = real_score + ai_score
+        if total > 0:
+            real_score = real_score / total
+            ai_score = ai_score / total
+        
+        return float(real_score), float(ai_score)
+        
+    except Exception as e:
+        print(f"[CLIP] Semantic score calculation error: {e}")
+        return 0.5, 0.5
+
+
 def detect_with_clip(
     img_array: np.ndarray,
     image_type: str = "mixed_scene"
@@ -152,6 +260,8 @@ def detect_with_clip(
             - confidence: float [0, 1]
             - features: dict (feature scores)
             - reason: str (classification reasoning)
+            - clip_real_score: float [0, 1] (v2.3)
+            - clip_ai_score: float [0, 1] (v2.3)
     """
     model, preprocess, device = get_clip_model()
     
@@ -161,7 +271,9 @@ def detect_with_clip(
             "ai_probability": 0.5,
             "confidence": 0.0,
             "features": {},
-            "reason": "CLIP model not available"
+            "reason": "CLIP model not available",
+            "clip_real_score": 0.5,
+            "clip_ai_score": 0.5
         }
     
     try:
@@ -209,13 +321,20 @@ def detect_with_clip(
         # Calculate confidence based on score difference
         confidence = abs(ai_probability - 0.5) * 2
         
+        # v2.3: Calculate semantic scores against specific categories
+        clip_real_score, clip_ai_score = _calculate_semantic_scores(
+            image_features, text_tokens, device, model
+        )
+        
         # Extract feature scores
         features = {
             "ai_similarity": float(ai_score),
             "real_similarity": float(real_score),
             "max_similarity": float(np.max(similarity_scores)),
             "min_similarity": float(np.min(similarity_scores)),
-            "std_similarity": float(np.std(similarity_scores))
+            "std_similarity": float(np.std(similarity_scores)),
+            "clip_real_score": clip_real_score,
+            "clip_ai_score": clip_ai_score
         }
         
         # Generate reasoning
@@ -232,7 +351,9 @@ def detect_with_clip(
             "ai_probability": round(ai_probability, 4),
             "confidence": round(confidence, 4),
             "features": features,
-            "reason": reason
+            "reason": reason,
+            "clip_real_score": round(clip_real_score, 4),
+            "clip_ai_score": round(clip_ai_score, 4)
         }
         
     except Exception as e:
@@ -241,7 +362,9 @@ def detect_with_clip(
             "ai_probability": 0.5,
             "confidence": 0.0,
             "features": {},
-            "reason": f"CLIP detection failed: {str(e)}"
+            "reason": f"CLIP detection failed: {str(e)}",
+            "clip_real_score": 0.5,
+            "clip_ai_score": 0.5
         }
 
 

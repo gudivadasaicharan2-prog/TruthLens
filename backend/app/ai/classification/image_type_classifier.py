@@ -186,12 +186,19 @@ def _is_screenshot(gray: np.ndarray, img_array: np.ndarray) -> Tuple[bool, float
     return confidence > 0.6, min(confidence, 0.95)
 
 
-def _is_document(gray: np.ndarray, img_array: np.ndarray) -> Tuple[bool, float]:
+def _is_document(gray: np.ndarray, img_array: np.ndarray, color_stats: Dict[str, float]) -> Tuple[bool, float]:
     """Detect documents based on text regions and aspect ratio with confidence."""
     text_regions = _detect_text_regions(gray)
     edge_density = _detect_edges(gray)
     
     confidence = 0.0
+    
+    # v2.3: Prevent artwork/illustration from being classified as document
+    # Check for illustration characteristics first
+    is_illustration = False
+    if color_stats["high_sat_ratio"] > 0.2 or color_stats["hue_std"] > 35:
+        is_illustration = True
+        confidence -= 0.3  # Penalize document classification for illustrations
     
     # Documents have high text region count
     if text_regions > 50:
@@ -213,7 +220,10 @@ def _is_document(gray: np.ndarray, img_array: np.ndarray) -> Tuple[bool, float]:
     if 0.6 < ratio < 0.85:  # Portrait document
         confidence += 0.1
     
-    return confidence > 0.6, min(confidence, 0.95)
+    # v2.3: If illustration detected, require higher confidence threshold
+    threshold = 0.8 if is_illustration else 0.6
+    
+    return confidence > threshold, min(confidence, 0.95)
 
 
 def _is_ai_artwork(img_array: np.ndarray, color_stats: Dict[str, float]) -> Tuple[bool, float]:
@@ -414,12 +424,31 @@ def classify_image_type(
     
     # Special type detection with confidence
     is_screenshot, screenshot_conf = _is_screenshot(gray, img_array)
-    is_document, document_conf = _is_document(gray, img_array)
+    is_document, document_conf = _is_document(gray, img_array, color_stats)
     is_ai_artwork, ai_artwork_conf = _is_ai_artwork(img_array, color_stats)
     is_cartoon, cartoon_conf = _is_cartoon(img_array, color_stats)
     is_artwork, artwork_conf = _is_artwork(img_array, color_stats)
     is_real_photo, photo_conf = _is_real_photograph(img_array, color_stats, edge_density, face_count)
     is_object, object_conf = _is_object(img_array, edge_density, aspect_ratio_type)
+    
+    # v2.3 DEBUG: Print all raw probabilities
+    print(f"[IMAGE_TYPE v2.3 DEBUG] === RAW PROBABILITIES ===")
+    print(f"[IMAGE_TYPE v2.3 DEBUG] screenshot: {screenshot_conf:.4f} (is={is_screenshot})")
+    print(f"[IMAGE_TYPE v2.3 DEBUG] document: {document_conf:.4f} (is={is_document})")
+    print(f"[IMAGE_TYPE v2.3 DEBUG] ai_artwork: {ai_artwork_conf:.4f} (is={is_ai_artwork})")
+    print(f"[IMAGE_TYPE v2.3 DEBUG] cartoon: {cartoon_conf:.4f} (is={is_cartoon})")
+    print(f"[IMAGE_TYPE v2.3 DEBUG] artwork: {artwork_conf:.4f} (is={is_artwork})")
+    print(f"[IMAGE_TYPE v2.3 DEBUG] real_photograph: {photo_conf:.4f} (is={is_real_photo})")
+    print(f"[IMAGE_TYPE v2.3 DEBUG] object: {object_conf:.4f} (is={is_object})")
+    print(f"[IMAGE_TYPE v2.3 DEBUG] === HEURISTICS ===")
+    print(f"[IMAGE_TYPE v2.3 DEBUG] edge_density: {edge_density:.4f}")
+    print(f"[IMAGE_TYPE v2.3 DEBUG] text_regions: {_detect_text_regions(gray):.0f}")
+    print(f"[IMAGE_TYPE v2.3 DEBUG] avg_saturation: {color_stats['avg_saturation']:.2f}")
+    print(f"[IMAGE_TYPE v2.3 DEBUG] hue_std: {color_stats['hue_std']:.2f}")
+    print(f"[IMAGE_TYPE v2.3 DEBUG] texture_entropy: {texture_entropy:.2f}")
+    print(f"[IMAGE_TYPE v2.3 DEBUG] sensor_noise: {sensor_noise:.2f}")
+    print(f"[IMAGE_TYPE v2.3 DEBUG] aspect_ratio: {width/height:.2f}")
+    print(f"[IMAGE_TYPE v2.3 DEBUG] face_count: {face_count}")
     
     # Determine image type with confidence
     type_candidates = []
@@ -435,12 +464,16 @@ def classify_image_type(
     if is_artwork:
         type_candidates.append(("artwork", artwork_conf))
     
-    # Face-based classification
+    # v2.3: Face-based classification - lower priority if artwork/cartoon detected
     if face_count > 0:
+        # If artwork/cartoon characteristics are present, reduce face-based confidence
+        artwork_detected = is_ai_artwork or is_cartoon or is_artwork
+        face_confidence = 0.85 if not artwork_detected else 0.60
+        
         if face_count == 1:
-            type_candidates.append(("portrait", 0.85))
+            type_candidates.append(("portrait", face_confidence))
         else:
-            type_candidates.append(("selfie", 0.85))
+            type_candidates.append(("selfie", face_confidence))
     
     if is_real_photo:
         type_candidates.append(("real_photograph", photo_conf))
@@ -453,6 +486,31 @@ def classify_image_type(
     
     # Select highest confidence type
     image_type, confidence = max(type_candidates, key=lambda x: x[1])
+    
+    # v2.3 DEBUG: Print top-3 candidates
+    sorted_candidates = sorted(type_candidates, key=lambda x: x[1], reverse=True)
+    print(f"[IMAGE_TYPE v2.3 DEBUG] === TOP CANDIDATES ===")
+    for i, (t, c) in enumerate(sorted_candidates[:3]):
+        print(f"[IMAGE_TYPE v2.3 DEBUG] {i+1}. {t}: {c:.4f}")
+    print(f"[IMAGE_TYPE v2.3 DEBUG] SELECTED: {image_type} (confidence={confidence:.4f})")
+    
+    # v2.3: Prioritize artwork/cartoon over object when artwork characteristics are strong
+    if image_type == "object" and (is_cartoon or is_artwork or is_ai_artwork):
+        artwork_conf = max(cartoon_conf, artwork_conf, ai_artwork_conf)
+        if artwork_conf > 0.60:
+            print(f"[IMAGE_TYPE v2.3 DEBUG] Overriding object with artwork type (artwork_conf={artwork_conf:.4f})")
+            # Select the highest confidence artwork type
+            artwork_types = [("cartoon", cartoon_conf), ("artwork", artwork_conf), ("ai_artwork", ai_artwork_conf)]
+            artwork_types = [(t, c) for t, c in artwork_types if c > 0.60]
+            if artwork_types:
+                image_type, confidence = max(artwork_types, key=lambda x: x[1])
+                print(f"[IMAGE_TYPE v2.3 DEBUG] FINAL SELECTED: {image_type} (confidence={confidence:.4f})")
+    
+    # v2.3: If confidence < 0.60, return mixed_scene instead of document
+    if confidence < 0.60 and image_type == "document":
+        print(f"[IMAGE_TYPE v2.3 DEBUG] Confidence {confidence:.4f} < 0.60, changing document to mixed_scene")
+        image_type = "mixed_scene"
+        confidence = max(confidence, 0.5)  # Minimum confidence for mixed_scene
     
     # Determine recommended pipeline
     if image_type in ["document", "screenshot"]:

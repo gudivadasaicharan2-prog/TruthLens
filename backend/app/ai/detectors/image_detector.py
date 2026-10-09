@@ -39,10 +39,14 @@ import gc
 import math
 import torch
 
+print("[IMPORT] Loading basic modules...")
+
 # ── Face detection (MTCNN — RetinaFace-class) ─────────────────────────────────
-from app.ai.models.face_detector import detect_faces_with_boxes
+# LAZY LOADED: from app.ai.models.face_detector import detect_faces_with_boxes
+# Moved to function-level import to avoid facenet-pytorch NMS operator error at startup
 
 # ── EfficientNet-B4 classifier ────────────────────────────────────────────────
+print("[IMPORT] Loading image_model...")
 from app.ai.models.image_model import (
     predict_whole_image,
     predict_fake_probability,
@@ -51,6 +55,7 @@ from app.ai.models.image_model import (
 )
 
 # ── Forensic modules ───────────────────────────────────────────────────────────
+print("[IMPORT] Loading forensic modules...")
 from app.ai.forensics.ela import ela_score
 from app.ai.forensics.noise import noise_splice_score
 from app.ai.forensics.frequency import frequency_domain_score
@@ -60,21 +65,33 @@ from app.ai.forensics.metadata import extract_exif, get_device_name, exif_authen
 from app.ai.forensics.edge import edge_consistency_score
 
 # ── Image type classifier ─────────────────────────────────────────────────────
+print("[IMPORT] Loading image_type_classifier...")
 from app.ai.classification.image_type_classifier import classify_image_type
 
 # ── CLIP detector ─────────────────────────────────────────────────────────────
+print("[IMPORT] Loading clip_detector...")
 from app.ai.detectors.clip_detector import detect_with_clip, should_use_clip, get_clip_ensemble_weight
 
 # ── Fusion configuration ─────────────────────────────────────────────────────
+print("[IMPORT] Loading fusion_config...")
 from app.ai.detectors.fusion_config import FusionConfig
 
-# ── Explainability (Grad-CAM) ─────────────────────────────────────────────────
-from app.ai.explainability.gradcam import get_gradcam_generator
-from app.ai.models.image_model import get_full_model
-import torchvision.transforms as T
+# ── v2.3 Enhancement Modules ────────────────────────────────────────────────
+print("[IMPORT] Loading v2.3 enhancement modules...")
+from app.ai.inference.confidence_guard import ConfidenceGuard
+from app.ai.inference.adaptive_verdict import AdaptiveVerdict
+from app.ai.forensics.diffusion_fingerprint import DiffusionFingerprint
+from app.ai.inference.performance_cache import get_global_cache
 
-# ── Report Generation ─────────────────────────────────────────────────────────
-from app.reporting.report_generator import generate_report
+# ── v3.0 OpenCLIP AI Artwork Detector ────────────────────────────────────────
+print("[IMPORT] Loading openclip_detector...")
+from app.ai.detectors.openclip_detector import detect_with_openclip, should_use_openclip
+
+# ── Explainability (Grad-CAM) ─────────────────────────────────────────────────
+# LAZY LOADED: from app.ai.explainability.gradcam import get_gradcam_generator
+# LAZY LOADED: from app.ai.models.image_model import get_full_model
+# LAZY LOADED: import torchvision.transforms as T
+# Moved to function-level import to avoid potential torchvision issues at startup
 
 # ── Grad-CAM singleton for performance optimization ─────────────────────────────
 _GRADCAM_GENERATOR = None
@@ -93,13 +110,18 @@ def _get_gradcam_generator():
     """
     global _GRADCAM_GENERATOR, _GRADCAM_DEVICE
     
+    # Lazy load Grad-CAM dependencies
+    print("[IMPORT] Lazy loading gradcam...")
+    from app.ai.explainability.gradcam import get_gradcam_generator as get_gradcam
+    from app.ai.models.image_model import get_full_model
+    
     # Determine device
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     
     # Recreate if device changed or not initialized
     if _GRADCAM_GENERATOR is None or _GRADCAM_DEVICE != device:
         model = get_full_model()
-        _GRADCAM_GENERATOR = get_gradcam_generator(model, device)
+        _GRADCAM_GENERATOR = get_gradcam(model, device)
         _GRADCAM_DEVICE = device
     
     return _GRADCAM_GENERATOR
@@ -276,12 +298,14 @@ def _fusion_engine(
     image_type: str = "mixed_scene",
     recommended_pipeline: str = "whole_image",
     clip_score: float | None = None,   # CLIP score (optional)
+    openclip_score: float | None = None,  # OpenCLIP score (v3.0)
+    diffusion_score: float | None = None,  # Diffusion fingerprint (v3.0)
 ) -> tuple[str, float, float, float, float, dict]:
     """
     Combine all signals into a final verdict, confidence, and probabilities.
 
     Uses configurable weights from FusionConfig based on image type and pipeline.
-Now includes CLIP contribution for enhanced AI detection.
+    v3.0: Includes OpenCLIP and diffusion fingerprint for artwork detection.
 
     Returns:
         (verdict, confidence, ai_probability, deepfake_probability, final_fake_prob, contributions)
@@ -290,27 +314,50 @@ Now includes CLIP contribution for enhanced AI detection.
     # Get pipeline weights from configuration
     weights = FusionConfig.get_pipeline_weights(recommended_pipeline, image_type)
     
-    # Get CLIP weight based on image type
-    clip_weight = get_clip_ensemble_weight(image_type)
+    # v3.0: Check if pipeline includes OpenCLIP and diffusion
+    has_openclip = 'openclip' in weights and weights['openclip'] > 0
+    has_diffusion = 'diffusion' in weights and weights['diffusion'] > 0
     
-    # Adjust weights to accommodate CLIP
-    if clip_score is not None and clip_weight > 0:
-        # Normalize existing weights to make room for CLIP
-        total_existing_weight = weights['whole_image'] + weights['face'] + weights['forensic']
-        if total_existing_weight > 0:
-            scale_factor = (1.0 - clip_weight) / total_existing_weight
+    # v3.0: Use OpenCLIP instead of CLIP for artwork pipeline
+    if has_openclip and openclip_score is not None:
+        # OpenCLIP takes precedence for artwork detection
+        clip_weight = 0.0  # Disable old CLIP
+        openclip_weight = weights['openclip']
+    else:
+        # Fall back to old CLIP logic
+        openclip_weight = 0.0
+        clip_weight = get_clip_ensemble_weight(image_type)
+        if clip_score is not None and clip_weight > 0:
+            # Normalize existing weights to make room for CLIP
+            total_existing_weight = weights['whole_image'] + weights['face'] + weights['forensic']
+            if total_existing_weight > 0:
+                scale_factor = (1.0 - clip_weight) / total_existing_weight
+                weights['whole_image'] *= scale_factor
+                weights['face'] *= scale_factor
+                weights['forensic'] *= scale_factor
+        else:
+            clip_weight = 0.0
+    
+    # v3.0: Normalize weights if diffusion is present
+    diffusion_weight = weights.get('diffusion', 0.0) if has_diffusion else 0.0
+    if diffusion_weight > 0 and diffusion_score is not None:
+        total_weight = weights['whole_image'] + weights['face'] + weights['forensic'] + clip_weight + openclip_weight
+        if total_weight > 0:
+            scale_factor = (1.0 - diffusion_weight) / total_weight
             weights['whole_image'] *= scale_factor
             weights['face'] *= scale_factor
             weights['forensic'] *= scale_factor
-    else:
-        clip_weight = 0.0
+            clip_weight *= scale_factor
+            openclip_weight *= scale_factor
     
-    # Calculate weighted fusion with CLIP
+    # Calculate weighted fusion with all signals
     final_fake_prob = (
         weights['whole_image'] * whole_image_score
         + weights['face'] * (face_score or 0.0)
         + weights['forensic'] * forensic_score
         + clip_weight * (clip_score or 0.0)
+        + openclip_weight * (openclip_score or 0.0)
+        + diffusion_weight * (diffusion_score or 0.0)
     )
     final_fake_prob = round(min(max(final_fake_prob, 0.0), 1.0), 4)
     
@@ -336,9 +383,26 @@ Now includes CLIP contribution for enhanced AI detection.
             'score': clip_score if clip_score is not None else 0.0,
             'weight': clip_weight,
             'contribution': clip_weight * (clip_score or 0.0),
-            'enabled': clip_score is not None and clip_weight > 0
+            'enabled': clip_weight > 0
         }
     }
+    
+    # v3.0: Add OpenCLIP and diffusion to contributions
+    if openclip_weight > 0:
+        contributions['openclip'] = {
+            'score': openclip_score if openclip_score is not None else 0.0,
+            'weight': openclip_weight,
+            'contribution': openclip_weight * (openclip_score or 0.0),
+            'enabled': True
+        }
+    
+    if diffusion_weight > 0:
+        contributions['diffusion'] = {
+            'score': diffusion_score if diffusion_score is not None else 0.0,
+            'weight': diffusion_weight,
+            'contribution': diffusion_weight * (diffusion_score or 0.0),
+            'enabled': True
+        }
 
     # --- Verdict selection using configurable thresholds ---
     thresholds = FusionConfig.VERDICT_THRESHOLDS
@@ -385,7 +449,7 @@ Now includes CLIP contribution for enhanced AI detection.
         ai_prob  = round(max(final_fake_prob * multipliers.get('ai', 14.0), 1.0), 1)
         df_prob  = round(max(final_fake_prob * multipliers.get('deepfake', 9.0),  1.0), 1)
 
-    return verdict, confidence, ai_prob, df_prob, final_fake_prob, contributions
+    return verdict, confidence, ai_prob, df_prob, final_fake_prob, contributions, clip_weight
 
 
 # =============================================================================
@@ -564,15 +628,18 @@ async def analyze_image(image_path: str) -> dict:
 
     # ── Image Type Classification (Pipeline Routing) ─────────────────────────
     # First, detect faces to inform classification
+    # Lazy load face detector to avoid NMS operator error at startup
+    print("[IMPORT] Lazy loading face_detector...")
+    from app.ai.models.face_detector import detect_faces_with_boxes
     face_count, boxes, probs = detect_faces_with_boxes(img_array)
     has_face   = face_count > 0
     
     # Run image type classifier
-    classification = classify_image_type(img_array, face_count)
-    image_type = classification["image_type"]
-    image_type_confidence = classification["image_type_confidence"]
-    recommended_pipeline = classification["recommended_pipeline"]
-    heuristics = classification["heuristics"]
+    classification_result = classify_image_type(img_array, face_count)
+    image_type = classification_result["image_type"]
+    image_type_confidence = classification_result["image_type_confidence"]
+    recommended_pipeline = classification_result["recommended_pipeline"]
+    heuristics = classification_result["heuristics"]
     
     print(
         f"[IMAGE v5] has_exif={has_exif}, faces={face_count}, "
@@ -638,14 +705,71 @@ async def analyze_image(image_path: str) -> dict:
         clip_score = clip_result["ai_probability"]
         clip_confidence = clip_result["confidence"]
         clip_reason = clip_result["reason"]
+        clip_real = clip_result.get("clip_real_score", 0.5)
+        clip_ai = clip_result.get("clip_ai_score", 0.5)
         print(f"[IMAGE v5] CLIP score={clip_score:.3f}, confidence={clip_confidence:.3f}")
+        print(f"[IMAGE v2.3 DEBUG] CLIP real_score={clip_real:.4f}, ai_score={clip_ai:.4f}")
     else:
         print(f"[IMAGE v5] CLIP skipped for {image_type}")
+        print(f"[IMAGE v2.3 DEBUG] CLIP skipped - should_use_clip returned False for {image_type}")
+
+    # ── v3.0: OpenCLIP AI Artwork Detection ─────────────────────────────────
+    openclip_score = None
+    openclip_result = None
+    openclip_ai_prob = 0.5
+    openclip_real_prob = 0.5
+    openclip_generator = "unknown"
+    openclip_generator_conf = 0.0
+    
+    # ── v2.3: Diffusion Fingerprint Analysis ─────────────────────────────────
+    # Must run BEFORE fusion since fusion uses diffusion_score
+    diffusion_score = None
+    diffusion_details = None
+    
+    if should_use_openclip(image_type):
+        print(f"[IMAGE v3.0] Running OpenCLIP analysis for {image_type}")
+        openclip_result = detect_with_openclip(img_array, image_type)
+        openclip_ai_prob = openclip_result["ai_art_probability"]
+        openclip_real_prob = openclip_result["real_photo_probability"]
+        openclip_generator = openclip_result["generator"]
+        openclip_generator_conf = openclip_result["generator_confidence"]
+        openclip_score = openclip_ai_prob  # Use AI probability as the score
+        print(f"[IMAGE v3.0] OpenCLIP ai_prob={openclip_ai_prob:.3f}, real_prob={openclip_real_prob:.3f}")
+        print(f"[IMAGE v3.0] OpenCLIP generator={openclip_generator}, confidence={openclip_generator_conf:.3f}")
+    else:
+        print(f"[IMAGE v3.0] OpenCLIP skipped for {image_type}")
+    
+    try:
+        diffusion_detector = DiffusionFingerprint()
+        diffusion_details = diffusion_detector.analyze(img_array, gray)
+        diffusion_score = diffusion_details['diffusion_fingerprint_score']
+        print(f"[IMAGE v2.3] diffusion_fingerprint_score={diffusion_score:.3f}")
+        print(f"[IMAGE v2.3 DEBUG] Diffusion heuristic scores: {diffusion_details.get('heuristic_scores', {})}")
+    except Exception as e:
+        print(f"[IMAGE v2.3] Diffusion fingerprint analysis failed: {e}")
+        print(f"[IMAGE v2.3 DEBUG] Diffusion analysis error - diffusion_score remains None")
 
     # ── Signal [4]: Fusion ────────────────────────────────────────────────────
-    verdict, confidence, ai_probability, deepfake_probability, final_fake_prob, contributions = (
-        _fusion_engine(whole_image_score, face_score, forensic_score, forensic_contributions, image_type, recommended_pipeline, clip_score)
+    print(f"[IMAGE v2.3 DEBUG] === BEFORE FUSION ===")
+    print(f"[IMAGE v2.3 DEBUG] classifier_score (whole_image): {whole_image_score:.4f}")
+    print(f"[IMAGE v2.3 DEBUG] face_score: {face_score if face_score else 'None'}")
+    print(f"[IMAGE v2.3 DEBUG] forensic_score: {forensic_score:.4f}")
+    print(f"[IMAGE v2.3 DEBUG] image_type: {image_type}")
+    print(f"[IMAGE v2.3 DEBUG] recommended_pipeline: {recommended_pipeline}")
+    print(f"[IMAGE v2.3 DEBUG] clip_score (old): {clip_score if clip_score else 'None'}")
+    print(f"[IMAGE v3.0 DEBUG] openclip_score: {openclip_score if openclip_score else 'None'}")
+    print(f"[IMAGE v3.0 DEBUG] diffusion_score: {diffusion_score if diffusion_score else 'None'}")
+    
+    verdict, confidence, ai_probability, deepfake_probability, final_fake_prob, contributions, clip_weight = (
+        _fusion_engine(whole_image_score, face_score, forensic_score, forensic_contributions, image_type, recommended_pipeline, clip_score, openclip_score, diffusion_score)
     )
+    
+    print(f"[IMAGE v2.3 DEBUG] === AFTER FUSION (OLD ENGINE) ===")
+    print(f"[IMAGE v2.3 DEBUG] final_fake_prob: {final_fake_prob:.4f}")
+    print(f"[IMAGE v2.3 DEBUG] verdict: {verdict}")
+    print(f"[IMAGE v2.3 DEBUG] confidence: {confidence:.4f}")
+    print(f"[IMAGE v2.3 DEBUG] contributions: {contributions}")
+    
     face_log = f"{face_score:.3f}" if face_score is not None else "n/a"
     clip_log = f"{clip_score:.3f}" if clip_score is not None else "n/a"
     print(
@@ -655,6 +779,92 @@ async def analyze_image(image_path: str) -> dict:
         f"clip={clip_log}  "
         f"=> final={final_fake_prob:.3f}  verdict={verdict}  conf={confidence:.2f}"
     )
+
+    # ── v3.0: Classifier Override Prevention ─────────────────────────────────
+    # If OpenCLIP predicts AI probability > 0.80, prevent classifier from overriding
+    # unless forensic evidence strongly contradicts it (forensic_score > 0.70)
+    if openclip_ai_prob > 0.80:
+        if forensic_score < 0.70:
+            print(f"[IMAGE v3.0] OpenCLIP AI probability {openclip_ai_prob:.3f} > 0.80, overriding classifier")
+            print(f"[IMAGE v3.0] Forensic score {forensic_score:.3f} < 0.70, allowing override")
+            # Boost the final_fake_prob toward AI
+            final_fake_prob = max(final_fake_prob, openclip_ai_prob)
+            # Recalculate verdict with boosted probability
+            if final_fake_prob >= FusionConfig.VERDICT_THRESHOLDS['ai_generated']:
+                verdict = "AI Generated"
+                confidence = _calibrate_confidence(final_fake_prob)
+        else:
+            print(f"[IMAGE v3.0] OpenCLIP AI probability {openclip_ai_prob:.3f} > 0.80, but forensic score {forensic_score:.3f} > 0.70, not overriding")
+
+    # ── v2.3: Confidence Guard Layer ────────────────────────────────────────
+    confidence_adjustment = 0.0
+    dominant_signal = "classifier"
+    secondary_signal = "forensic"
+    
+    print(f"[IMAGE v2.3 DEBUG] === CONFIDENCE GUARD ===")
+    print(f"[IMAGE v2.3 DEBUG] Input confidence: {confidence:.4f}")
+    print(f"[IMAGE v2.3 DEBUG] Input verdict: {verdict}")
+    print(f"[IMAGE v2.3 DEBUG] Forensic score: {forensic_score:.4f}")
+    print(f"[IMAGE v2.3 DEBUG] CLIP AI score: {clip_result.get('clip_ai_score', 0.5) if clip_result else 0.5:.4f}")
+    print(f"[IMAGE v2.3 DEBUG] Diffusion score: {diffusion_score if diffusion_score else 'None'}")
+    
+    try:
+        clip_real = clip_result.get("clip_real_score", 0.5) if clip_result else 0.5
+        clip_ai = clip_result.get("clip_ai_score", 0.5) if clip_result else 0.5
+        
+        adjusted_confidence, adjusted_verdict, guard_details = ConfidenceGuard.apply_guard(
+            classifier_confidence=confidence,
+            classifier_verdict=verdict,
+            forensic_score=forensic_score,
+            forensic_contributions=forensic_contributions,
+            clip_score=clip_ai,
+            patch_consensus_score=None,  # Will be populated when patch inference is enabled
+            ood_score=None  # Will be populated when OOD detection is enabled
+        )
+        
+        confidence_adjustment = guard_details.get('confidence_adjustment', 0.0)
+        
+        print(f"[IMAGE v2.3 DEBUG] Confidence guard adjustment: {confidence_adjustment:.4f}")
+        print(f"[IMAGE v2.3 DEBUG] Adjusted confidence: {adjusted_confidence:.4f}")
+        print(f"[IMAGE v2.3 DEBUG] Adjusted verdict: {adjusted_verdict}")
+        print(f"[IMAGE v2.3 DEBUG] Guard details: {guard_details}")
+        
+        # Identify dominant and secondary signals
+        dominant_signal, secondary_signal = ConfidenceGuard.get_dominant_signal(
+            forensic_score=forensic_score,
+            clip_score=clip_ai,
+            patch_consensus=None,
+            ood_score=None,
+            diffusion_score=diffusion_score
+        )
+        
+        print(f"[IMAGE v2.3 DEBUG] Dominant signal: {dominant_signal}")
+        print(f"[IMAGE v2.3 DEBUG] Secondary signal: {secondary_signal}")
+        print(f"[IMAGE v2.3] Confidence guard: adjustment={confidence_adjustment:.3f}, "
+              f"dominant={dominant_signal}, secondary={secondary_signal}")
+    except Exception as e:
+        print(f"[IMAGE v2.3] Confidence guard failed: {e}")
+        print(f"[IMAGE v2.3 DEBUG] Confidence guard error - using original values")
+        adjusted_confidence = confidence
+        adjusted_verdict = verdict
+
+    # ── v2.3: Adaptive Verdict Logic (optional - can be enabled for multi-signal) ──
+    # Currently using standard fusion with confidence guard
+    # To enable full adaptive verdict, uncomment the following:
+    # try:
+    #     adaptive_verdict, adaptive_confidence, signal_analysis = AdaptiveVerdict.compute_adaptive_verdict(
+    #         classifier_score=whole_image_score,
+    #         forensic_score=forensic_score,
+    #         clip_ai_score=clip_result.get("clip_ai_score", 0.5) if clip_result else None,
+    #         patch_consensus_score=None,
+    #         ood_score=None,
+    #         diffusion_score=diffusion_score,
+    #         has_faces=has_face,
+    #         image_type=image_type
+    #     )
+    #     print(f"[IMAGE v2.3] Adaptive verdict: {adaptive_verdict}, conf={adaptive_confidence:.2f}")
+    # except Exception as e:
+    #     print(f"[IMAGE v2.3] Adaptive verdict failed: {e}")
 
     # ── Signal [5]: Grad-CAM Visualization (Explainability) ───────────────────
     # Generate Grad-CAM heatmaps for model interpretability
@@ -666,6 +876,10 @@ async def analyze_image(image_path: str) -> dict:
         if recommended_pipeline != "document":
             # Get Grad-CAM generator (singleton for performance)
             gradcam_gen = _get_gradcam_generator()
+            
+            # Lazy load torchvision transforms for Grad-CAM
+            print("[IMPORT] Lazy loading torchvision transforms...")
+            import torchvision.transforms as T
             
             # Prepare input tensor for Grad-CAM (same transform as model)
             transform = T.Compose([
@@ -770,35 +984,6 @@ async def analyze_image(image_path: str) -> dict:
     # Generate explanation
     explanation = _generate_explanation(verdict, final_fake_prob, contributions, findings, clip_reason)
 
-    # ── Signal [6]: PDF Report Generation (Phase 5) ─────────────────────────────
-    # Generate professional PDF report with all analysis results
-    report_path = None
-    try:
-        # Prepare analysis data for report generation
-        report_data = {
-            'verdict': verdict,
-            'confidence': confidence,
-            'ai_probability': ai_probability,
-            'deepfake_probability': deepfake_probability,
-            'image_type': image_type,
-            'module_contributions': contributions,
-            'explanation': explanation,
-            'key_findings': findings,
-            'metadata_summary': metadata_summary,
-            'filename': filename
-        }
-        
-        # Generate PDF report
-        report_path = generate_report(
-            analysis_data=report_data,
-            original_image_path=image_path,
-            output_dir="uploads/reports"
-        )
-        print(f"[IMAGE v5] PDF report generated: {report_path}")
-    except Exception as e:
-        print(f"[IMAGE v5] PDF report generation failed: {e}")
-        # Continue without report if it fails (non-critical for main functionality)
-
     return to_python({
         "verdict":              verdict,
         "confidence":           confidence,
@@ -817,22 +1002,34 @@ async def analyze_image(image_path: str) -> dict:
         # New fields for Phase 4 - Grad-CAM visualization (backward compatible)
         "heatmap_path":         heatmap_paths['heatmap_path'],
         "overlay_path":         heatmap_paths['overlay_path'],
-        # New fields for Phase 5 - PDF report (backward compatible)
-        "report_path":          report_path,
         # New fields for Phase 6 - Enhanced Image Type Classification (backward compatible)
-        "image_type_confidence": image_type_confidence,
+        "image_type_confidence": classification_result['image_type_confidence'],
         "recommended_pipeline":  recommended_pipeline,
-        "heuristics":           heuristics,
+        "heuristics":           classification_result['heuristics'],
         # New fields for Phase 7 - CLIP Multi-Model Ensemble (backward compatible)
-        "clip_probability":      clip_score if clip_score is not None else 0.0,
+        "clip_probability":     clip_score if clip_score else 0.0,
         "clip_confidence":      clip_confidence,
         "ensemble_score":       final_fake_prob,
-        "clip_enabled":         clip_score is not None,
+        "clip_enabled":         clip_weight > 0,
         # New fields for v2.2 - backward compatible additions (optional fields)
-        "patch_statistics":      None,  # Will be populated when patch inference is enabled
+        "patch_statistics":     None,  # Will be populated when patch inference is enabled
         "ood_score":            None,  # Will be populated when OOD detection is enabled
-        "frequency_features":    None,  # Will be populated when enhanced frequency analysis is enabled
+        "frequency_features":   None,  # Will be populated when enhanced frequency analysis is enabled
         "noise_features":       None,  # Will be populated when enhanced noise analysis is enabled
-        "fusion_weights_used":  contributions,  # Already available in module_contributions
-        "confidence_calibrated": confidence,  # Already calibrated, exposed for transparency
+        "fusion_weights_used":  contributions,
+        "confidence_calibrated": confidence,
+        # New fields for v2.3 - backward compatible additions (explainability)
+        "confidence_adjustment": confidence_adjustment,
+        "fusion_reason": "standard_fusion_with_confidence_guard",
+        "dominant_signal": dominant_signal,
+        "secondary_signal": secondary_signal,
+        "clip_real_score": clip_result.get("clip_real_score", 0.5) if clip_result else 0.5,
+        "clip_ai_score": clip_result.get("clip_ai_score", 0.5) if clip_result else 0.5,
+        "diffusion_fingerprint_score": diffusion_score,
+        "patch_consensus_score": None,  # Will be populated when patch consensus is enabled
+        # v3.0 OpenCLIP fields
+        "openclip_ai_probability": openclip_ai_prob,
+        "openclip_real_probability": openclip_real_prob,
+        "openclip_generator": openclip_generator,
+        "openclip_generator_confidence": openclip_generator_conf,
     })

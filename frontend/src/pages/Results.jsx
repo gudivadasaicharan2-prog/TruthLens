@@ -298,16 +298,8 @@ const Results = () => {
 
                   {/* Downloads Section */}
                   <div className="mt-6 pt-6 border-t border-card/50">
-                    <h4 className="text-sm font-bold text-text-secondary uppercase tracking-wider mb-4">Download Reports</h4>
+                    <h4 className="text-sm font-bold text-text-secondary uppercase tracking-wider mb-4">Download Visualizations</h4>
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                      <motion.button
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
-                        className="flex flex-col items-center gap-2 p-4 bg-glass rounded-xl border border-card/50 hover:border-accent/50 transition-all"
-                      >
-                        <FileText className="w-5 h-5 text-accent" />
-                        <span className="text-xs text-text-secondary">PDF Report</span>
-                      </motion.button>
                       <motion.button
                         whileHover={{ scale: 1.02 }}
                         whileTap={{ scale: 0.98 }}

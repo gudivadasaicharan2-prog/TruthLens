@@ -229,14 +229,35 @@ class PatchInference:
         weighted_avg = np.dot(probabilities, weights) if probabilities else 0.0
         
         # Detailed statistics
+        std_dev = float(np.std(probabilities)) if probabilities else 0.0
+        median_prob = float(np.median(probabilities)) if probabilities else 0.0
+        q25 = float(np.percentile(probabilities, 25)) if probabilities else 0.0
+        q75 = float(np.percentile(probabilities, 75)) if probabilities else 0.0
+        
+        # v2.3: Calculate disagreement ratio and consensus score
+        # Disagreement ratio: proportion of patches that deviate significantly from median
+        if probabilities and len(probabilities) > 1:
+            deviations = [abs(p - median_prob) for p in probabilities]
+            avg_deviation = np.mean(deviations)
+            disagreement_ratio = avg_deviation / (median_prob + 1e-6)
+            disagreement_ratio = min(disagreement_ratio, 1.0)
+            
+            # Consensus score: 1 - disagreement_ratio (higher = more agreement)
+            consensus_score = 1.0 - disagreement_ratio
+        else:
+            disagreement_ratio = 0.0
+            consensus_score = 1.0
+        
         patch_stats = {
-            'std_deviation': float(np.std(probabilities)) if probabilities else 0.0,
-            'median': float(np.median(probabilities)) if probabilities else 0.0,
-            'q25': float(np.percentile(probabilities, 25)) if probabilities else 0.0,
-            'q75': float(np.percentile(probabilities, 75)) if probabilities else 0.0,
+            'std_deviation': std_dev,
+            'median': median_prob,
+            'q25': q25,
+            'q75': q75,
             'high_risk_patches': sum(1 for p in probabilities if p > 0.7),
             'medium_risk_patches': sum(1 for p in probabilities if 0.4 < p <= 0.7),
             'low_risk_patches': sum(1 for p in probabilities if p <= 0.4),
+            'disagreement_ratio': disagreement_ratio,
+            'consensus_score': consensus_score
         }
         
         return {
